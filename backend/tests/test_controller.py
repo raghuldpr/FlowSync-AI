@@ -67,6 +67,37 @@ def test_gridlock_rotation_only_when_both_axes_blocked(ctx, setup):
     assert d["reason"] != "gridlock_rotation"
 
 
+def test_per_approach_capacity_drives_spillback_and_public_bands(ctx, setup, client):
+    from dataclasses import replace
+    q = setup(W1=5, L13=4, L21=0, L31=0)
+    assert decide(ctx, q)["inputs"]["notes"] == []                 # 4/8 = 50%: not spilled back
+    ctx.topology.approaches["L13"] = replace(ctx.topology.approaches["L13"], capacity=4)
+    d = decide(ctx, q)
+    assert "W1:spillback" in d["inputs"]["notes"]                  # 4/4 = 100% of THIS lane's physical capacity
+    for a in ctx.topology.approaches:
+        ctx.store.set_traffic(a, 4 if a == "L13" else 0, "overhead_camera")
+    assert client.get("/api/public/congestion").json()["L13"] == "high"
+    assert client.get("/api/public/topology").json()["capacities"]["L13"] == 4
+
+
+def test_a_lone_vehicle_behind_a_congested_link_is_not_starved(ctx, setup):
+    """Found by the A/B evaluation: pressure is clamped at 0, so a single waiting vehicle whose downstream link holds more
+    vehicles had zero pressure, and the other axis kept green forever (an ambulance waited 230 s at a stop line)."""
+    q = setup(elapsed=6000, L13=6, W1=1)                    # W1's downstream (L13) holds 6 -> pressure max(0, 1-6) = 0
+    d = decide(ctx, q)
+    assert d["inputs"]["scores"]["B"] == 0 and d["inputs"]["demand"]["B"] == 1
+    assert (d["target"], d["reason"]) == ("B", "current_axis_empty"), "nobody to serve on A, someone waiting on B"
+    d = decide(ctx, setup(elapsed=21000, L21=2, L13=6, W1=1))   # A still has demand: max green still lets B in
+    assert (d["target"], d["reason"]) == ("B", "max_green_reached")
+    d = decide(ctx, setup(elapsed=6000, L21=2, L13=0, W1=1))     # normal case unchanged: A has demand and more pressure
+    assert d["target"] == "A"
+
+
+def test_demand_ignores_vehicles_blocked_by_a_full_downstream_link(ctx, setup):
+    d = decide(ctx, setup(elapsed=21000, L13=7, W1=3))           # W1's downstream L13 is 87 % full: do not feed it
+    assert d["inputs"]["demand"]["B"] == 0 and d["target"] == "A"
+
+
 def test_max_green_forces_switch(ctx, setup):
     d = decide(ctx, setup(elapsed=21000, L21=8, W1=2))
     assert (d["target"], d["reason"]) == ("B", "max_green_reached")

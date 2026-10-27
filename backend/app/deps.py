@@ -9,7 +9,9 @@ from .db import now_iso
 from .security import AuthError
 
 
-def get_ctx(request: Request):
+async def get_ctx(request: Request):
+    # async on purpose: a sync dependency costs a thread-pool hop on every request, and under the test client
+    # (Python 3.14 + anyio) a lost wake-up on that hop hung long simulation runs
     return request.app.state.ctx
 
 
@@ -17,18 +19,28 @@ def client_id(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def require_operator(request: Request, ctx=Depends(get_ctx)) -> dict:
-    header = request.headers.get("authorization", "")
-    sess = auth.resolve(ctx.db, header[7:]) if header.lower().startswith("bearer ") else None
-    action = f"{request.method} {request.url.path}"
-    if sess is None:
-        audit(ctx.db, client_id(request), "public", action, result="denied_unauthenticated")
-        raise HTTPException(401, "operator login required")
-    if sess["role"] != "operator":
-        audit(ctx.db, sess["username"], sess["role"], action, result="denied_role")
-        raise HTTPException(403, "operator role required")
-    return sess
+ROLE_ORDER = {"viewer": 1, "operator": 2, "admin": 3}
 
+
+def _require(min_role: str):
+    """Backend-enforced role check; every denial is audit-logged. viewer < operator < admin."""
+    def dep(request: Request, ctx=Depends(get_ctx)) -> dict:
+        header = request.headers.get("authorization", "")
+        sess = auth.resolve(ctx.db, header[7:]) if header.lower().startswith("bearer ") else None
+        action = f"{request.method} {request.url.path}"
+        if sess is None:
+            audit(ctx.db, client_id(request), "public", action, result="denied_unauthenticated")
+            raise HTTPException(401, "login required")
+        if ROLE_ORDER.get(sess["role"], 0) < ROLE_ORDER[min_role]:
+            audit(ctx.db, sess["username"], sess["role"], action, result="denied_role")
+            raise HTTPException(403, f"{min_role} role required")
+        return sess
+    return dep
+
+
+require_viewer = _require("viewer")        # read-only access to operational data
+require_operator = _require("operator")    # anything that changes the system
+require_admin = _require("admin")          # users, exports, retention
 
 @dataclass
 class DeviceCall:

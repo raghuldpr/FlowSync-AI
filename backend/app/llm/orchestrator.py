@@ -41,6 +41,8 @@ def ask(ctx, question: str, caller: dict) -> dict:
         return {"answer": fallback.answer(ctx, question, caller), "mode": "deterministic_fallback",
                 "model": None, "tool_calls": calls, "proposals": proposals, "fallback_reason": reason}
 
+    if getattr(client, "forced_down", False):
+        return fall_back("drill_provider_down")
     if not client.enabled:
         return fall_back("llm_disabled" if not client.requested else "llm_not_configured")
 

@@ -15,6 +15,7 @@ class Store:
         self._seq = {}                          # device_id -> last issued seq
         self.closed_edges = set()               # routing closures set by operators
         self.incident_closed = set()            # closures caused by open incidents (e.g. stalled vehicle)
+        self.hazard_penalty = {}                # edge -> extra seconds from verified road hazards
         self.last_full = {}                     # intersection -> latest controller decision incl. inputs
 
     def set_traffic(self, approach: str, count: int, source: str, stationary_s: float = 0.0):

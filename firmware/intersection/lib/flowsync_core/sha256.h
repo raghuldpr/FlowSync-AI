@@ -3,7 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-namespace fsync {
+namespace flowsync {
 
 class Sha256 {
  public:
@@ -34,4 +34,4 @@ class HmacSha256 {
 
 void to_hex(const uint8_t* in, size_t n, char* out);   // writes 2n chars + NUL
 
-}  // namespace fsync
+}  // namespace flowsync

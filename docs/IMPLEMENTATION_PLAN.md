@@ -250,3 +250,41 @@ Optional: HC-SR04P/RCWL-1601 (3.3 V) to skip dividers. Drop for Tier 1: car HC-S
 1. Hackathon timing allows building now; hardware may not be on hand yet → simulator-first.
 2. One LLM provider is available with a key (any OpenAI-compatible endpoint).
 3. Dashboard without a JS build step is acceptable.
+
+---
+
+# Revised plan v2 (replaces "Phases 8–9" above; status as of this revision)
+
+**Done:** phases 0–7 (backend, device API, controller, FSM firmware core, simulator, EV tracking/routing/warnings, incidents,
+dashboards, LLM layer, camera vision on a synthetic feed). **Never run on real hardware:** `firmware/intersection/src/main.cpp`,
+the phone camera, the physical wiring. Goal of v2: maximise the problem statement's must-haves *and* demo reliability.
+
+| # | Phase | Why (problem-statement link) | Est. |
+|---|---|---|---|
+| 8 | Compile ESP32 firmware (PlatformIO) | Physical prototype is mandatory; remove the biggest unknown first | 0.7 h |
+| 9 | Scenario engine, one-click demo, failure drills, live built-vs-simulated, spec v2 | "One full scenario… state what is built and simulated" | 1.5 h |
+| 10 | Road-user layer: pseudonymous sessions (position + route), server-side relevance, phone page, SSE push | "warnings shown only to relevant road users"; "drivers learn about congestion too late" | 3 h |
+| 11 | EV green corridor + measured A/B results (EV time with/without system; adaptive vs fixed) | "helps emergency vehicles pass faster" needs a number | 3 h |
+| 12 | Road conditions: hazard incidents (operator/public/ESP32-CAM or labelled injection) affecting routes + warnings | "road conditions" monitoring | 2 h |
+| 13 | Backend hardening: SSE, rate limits, viewer/operator/admin roles, audit export, record/replay, latency metrics, retention job | restricted actions enforced + logged; deterministic safety | 2 h |
+| 14 | Scale-up view: internal grid simulation (~12 intersections) using the same controller/FSM | "multiple intersections", city scale, without SUMO risk | 2–3 h |
+| 15 | Hardware integration + rehearsal + demo freeze (≥2 h before judging) | physical prototype works end-to-end | ≥3 h, parallel |
+
+Budget: today 3 h → 8, 9, start 10. Tomorrow ~10 h → 10–13, optionally 14, hardware (15) in parallel by the second person.
+Principle: a working physical end-to-end demo beats extra features; freeze features 2 h before judging.
+
+## Status of plan v2 (updated after phases 10–15)
+
+| # | Phase | Status | Evidence |
+|---|---|---|---|
+| 8 | Compile ESP32 firmware | **Done** — `esp32dev`, `lamptest`, `esp32cam` build. Found and fixed a real `fsync` namespace clash with the ESP32 SDK | `firmware/*/platformio.ini` |
+| 9 | Scenario engine, drills, live provenance, spec v2 | **Done** | `docs/DEMO_SCRIPT.md`, `test_scenarios.py` |
+| 10 | Road-user layer | **Done** — server-side relevance, fixed wording, phone page, long-poll push, instant EV refresh | `test_roaduser.py`, `/driver.html` |
+| 11 | EV green corridor + measured A/B results | **Done** — lookahead priority; starvation bug found and fixed; harness + `docs/RESULTS.md` (simulated) | `simulator/evaluate.py` |
+| 12 | Road conditions | **Done** — verification workflow, route penalties, alerts, secure image upload, heuristic detector, ESP32-CAM firmware (compiles) | `test_hazards.py`, `firmware/roadcam` |
+| 13 | Backend hardening | **Done** — viewer/operator/admin, audit CSV, retention, health, metrics, body/rate limits, scenario replay | `test_hardening.py` |
+| 14 | City-scale view | **Done** — grid generator, 12 intersections on the same code, city scenario, scale tests | `test_grid.py`, `config/topology.grid.yaml` |
+| 15 | Runbook, preflight, pitch | **Done** (hardware work itself still to do) | `docs/HARDWARE_RUNBOOK.md`, `python -m app.preflight` |
+
+**What is left is physical:** wire and flash the controller (gates 1–2 in the runbook), build and mark the table, calibrate the real camera and measure its counting accuracy,
+test the EV marker, rehearse in physical mode. None of that can be verified from software.

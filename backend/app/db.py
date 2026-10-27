@@ -54,6 +54,18 @@ CREATE TABLE IF NOT EXISTS llm_proposals (
   created_by TEXT NOT NULL, via TEXT NOT NULL, intersection TEXT NOT NULL, target TEXT NOT NULL,
   duration_s INTEGER NOT NULL, rationale TEXT, status TEXT NOT NULL, validator_reason TEXT NOT NULL,
   decided_by TEXT, decided_at TEXT);
+CREATE TABLE IF NOT EXISTS replay_runs (
+  run_id TEXT PRIMARY KEY, scenario_id TEXT NOT NULL, title TEXT NOT NULL, started_at TEXT NOT NULL, frames INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS replay_frames (
+  run_id TEXT NOT NULL, t REAL NOT NULL, data TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS ix_replay_frames ON replay_frames(run_id, t);
+CREATE TABLE IF NOT EXISTS hazards (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, edge TEXT NOT NULL, progress REAL, severity TEXT NOT NULL,
+  status TEXT NOT NULL, source TEXT NOT NULL, confidence REAL, image_id TEXT, created_at TEXT NOT NULL,
+  decided_by TEXT, decided_at TEXT, resolved_at TEXT);
+CREATE TABLE IF NOT EXISTS images (
+  id TEXT PRIMARY KEY, device_id TEXT NOT NULL, path TEXT NOT NULL, bytes INTEGER NOT NULL, edge TEXT, progress REAL,
+  created_at TEXT NOT NULL, detection TEXT);
 CREATE TABLE IF NOT EXISTS system_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, type TEXT NOT NULL, source TEXT NOT NULL,
   severity TEXT NOT NULL, payload TEXT);

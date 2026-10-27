@@ -17,7 +17,7 @@ def clock():
 
 @pytest.fixture
 def app(tmp_path, clock):
-    s = Settings(db_path=str(tmp_path / "t.db"), operator_password=PW, controller_autostart=False,
+    s = Settings(db_path=str(tmp_path / "t.db"), operator_password=PW, controller_autostart=False, image_dir=str(tmp_path / "img"),
                  llm_enabled=False, llm_base_url="", llm_model="", llm_api_key="")
     return create_app(s, clock)
 

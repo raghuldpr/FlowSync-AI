@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FlowSync Driver</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  body { padding: 14px; max-width: 560px; margin: 0 auto; }
+  h1 { margin-bottom: 4px; }
+  .card { border: 2px solid var(--line); border-radius: 14px; padding: 14px 16px; margin: 10px 0; background: var(--panel); }
+  .card .t { font-size: 18px; line-height: 1.35; }
+  .card.ev { border-color: var(--bad); }
+  .card.ev.live .t { font-size: 22px; font-weight: 600; }
+  .card.warn { border-color: var(--warn); }
+  .card.info { border-color: var(--accent); }
+  .card.done { border-color: var(--ok); }
+  .card.gone { opacity: .75; }
+  .tag { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  label { display: block; margin: 10px 0 4px; color: var(--muted); }
+  select, button.big { width: 100%; padding: 12px; font-size: 17px; }
+  button.big { margin-top: 14px; }
+  svg { width: 100%; height: auto; display: block; }
+  .row2 { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  #err { color: var(--bad); min-height: 1.3em; }
+</style>
+</head>
+<body>
+<h1>FlowSync driver</h1>
+<p class="muted" style="margin:0 0 8px">Join the demo city as a virtual driver. You will only see alerts that matter to <b>your</b> route.</p>
+
+<section id="join" class="card" hidden>
+  <label for="from">Where are you entering?</label><select id="from"></select>
+  <label for="to">Where are you going?</label><select id="to"></select>
+  <div id="err" role="alert"></div>
+  <button class="big" id="go">Start driving</button>
+  <p class="muted" style="font-size:13px">No account, no name. You get a random car number; nothing about you is stored, and the session ends when you arrive.</p>
+</section>
+
+<section id="live" hidden>
+  <div class="row2"><b id="me"></b><span id="status" class="chip"></span><button class="ghost" id="leave">Leave</button></div>
+  <div class="muted" id="trip"></div>
+  <div class="card"><svg id="map" viewBox="0 0 800 520" role="img" aria-label="Map showing your car"></svg><div class="muted" id="route"></div></div>
+  <div id="alerts" aria-live="assertive"></div>
+</section>
+
+<p class="muted" style="font-size:12px;margin-top:18px">Information only. Always follow road signs, signals and the instructions of police and emergency services. Make way for emergency vehicles only when it is safe and lawful to do so.</p>
+<script src="driver.js"></script>
+</body>
+</html>

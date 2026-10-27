@@ -26,6 +26,7 @@ class LLMClient:
         self.enabled = bool(settings.llm_enabled and self.base_url and self.model and self._key)
         self.requested = bool(settings.llm_enabled)
         self._transport = transport
+        self.forced_down = False          # failure drill: behave as if the provider were unreachable
 
     def status(self) -> dict:
         host = urlparse(self.base_url).hostname if self.base_url else None
@@ -33,6 +34,8 @@ class LLMClient:
 
     def chat(self, messages: list, tools: Optional[list] = None, timeout: Optional[float] = None) -> dict:
         """Returns the first choice's message dict. Raises LLMError."""
+        if self.forced_down:
+            raise LLMError("unreachable")
         if not self.enabled:
             raise LLMError("not_configured")
         body = {"model": self.model, "messages": messages, "temperature": 0, "max_tokens": self.max_tokens}

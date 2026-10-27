@@ -37,7 +37,7 @@
   <h1>FlowSync AI <span class="muted">· Operator</span></h1>
   <span id="mode" class="chip">connecting…</span>
   <span>Alerts <span id="alerts" class="alert-badge zero">0</span></span>
-  <span id="devices"></span>
+  <span id="devices"></span><span id="roadusers"></span>
   <span class="spacer"></span>
   <a href="public.html" target="_blank" class="muted">Driver view ↗</a>
   <button class="ghost" id="logout" hidden>Log out</button>
@@ -66,12 +66,20 @@
         <button data-tab="wlog">Warning log</button>
         <button data-tab="audit">Audit</button>
         <button data-tab="bvs">Built vs simulated</button>
+        <button data-tab="replay">Replay</button>
       </div>
       <div id="tab-body" class="log"></div>
     </section>
   </div>
 
   <div class="col">
+    <section class="panel" id="scn-panel">
+      <h2 style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">Scenario <span id="scn-state" class="chip stale">idle</span> <span id="scn-world" class="chip"></span>
+        <a href="presenter.html" target="_blank" rel="noopener" style="margin-left:auto;text-transform:none;letter-spacing:0">Presenter view ↗</a></h2>
+      <div class="row"><select id="scn-id" aria-label="Scenario" style="flex:1;min-width:0"></select>
+        <button id="scn-start">Start</button><button id="scn-stop" class="ghost">Stop</button></div>
+      <div id="scn-body"></div>
+    </section>
     <section class="panel" id="ev-panel"></section>
     <section class="panel">
       <h2>Incidents &amp; alerts</h2>
@@ -82,6 +90,19 @@
           <select id="inc-type"><option value="stalled_vehicle">stalled_vehicle</option><option value="congestion_spike">congestion_spike</option></select>
           <select id="inc-approach"></select>
           <button id="inc-go">Declare</button>
+        </div>
+      </details>
+    </section>
+    <section class="panel">
+      <h2>Road conditions <span id="hz-count" class="chip stale">0</span></h2>
+      <div id="hazards"></div>
+      <details style="margin-top:8px">
+        <summary class="muted">Report a hazard</summary>
+        <div class="row" style="margin-top:6px">
+          <select id="hz-kind"><option value="pothole">pothole</option><option value="debris">debris</option><option value="wet_surface">wet_surface</option></select>
+          <select id="hz-edge"></select>
+          <select id="hz-sev"><option>low</option><option selected>medium</option><option>high</option></select>
+          <button id="hz-go">Add (verified)</button>
         </div>
       </details>
     </section>

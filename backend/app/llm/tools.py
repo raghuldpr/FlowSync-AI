@@ -9,7 +9,6 @@ from typing import Callable
 
 from ..audit import audit
 from ..core.routing import dijkstra, edge_costs
-from ..core.incidents import EXT_NODES
 
 _CTRL = re.compile(r"[\x00-\x1f\x7f]")
 
@@ -78,13 +77,14 @@ def _obj(props=None, required=None):
 # ---- read tools ----------------------------------------------------------------------------------
 def get_traffic_state(tc, args):
     ctx = tc.ctx
-    cap, stale = ctx.topology.control.link_capacity, ctx.topology.control.stale_after_s
+    stale = ctx.topology.control.stale_after_s
     now, out = ctx.store.clock(), {}
     for a, r in ctx.store.traffic.items():
         s = now - r["recv_t"] > stale
-        out[a] = {"vehicles": r["count"], "occupancy": round(r["count"] / cap, 2), "stale": s,
+        cap = ctx.topology.approaches[a].capacity
+        out[a] = {"vehicles": r["count"], "capacity": cap, "occupancy": round(r["count"] / cap, 2), "stale": s,
                   "source": r["source"], "age_s": round(now - r["recv_t"], 1)}
-    return {"capacity_per_link": cap, "approaches": out}
+    return {"approaches": out}
 
 
 def get_signal_states(tc, args):
@@ -128,7 +128,9 @@ def get_active_warnings(tc, args):
 def get_route_alternatives(tc, args):
     t, ctx = tc.ctx.topology, tc.ctx
     o, d = args["origin"], args["destination"]
-    costs = edge_costs(t, ctx.store.fresh_traffic(t.control.stale_after_s), ctx.store.all_closed())
+    if o not in t.nodes or d not in t.nodes or o in t.intersections or d in t.intersections or o == d:
+        return {"error": "origin and destination must be two different external entrances: " + ", ".join(n for n in t.nodes if n not in t.intersections)}
+    costs = edge_costs(t, ctx.store.fresh_traffic(t.control.stale_after_s), ctx.store.all_closed(), ctx.store.hazard_penalty)
     best = dijkstra(t, costs, o, d)
     if best is None:
         return {"error": "no route"}
@@ -159,7 +161,7 @@ def propose_signal_adjustment(tc, args):
     return res
 
 
-NODE = {"type": "string", "enum": list(EXT_NODES)}
+NODE = {"type": "string", "maxLength": 16}               # validated against the topology in the handler
 TOOLS = {t.name: t for t in [
     Tool("get_traffic_state", "Vehicle counts, occupancy and data freshness for every approach.", _obj(), get_traffic_state),
     Tool("get_signal_states", "Device-reported lamps/phase per intersection plus the controller's latest decision and reason.", _obj(), get_signal_states),
@@ -173,7 +175,7 @@ TOOLS = {t.name: t for t in [
     Tool("propose_signal_adjustment",
          "PROPOSE (not perform) asking an intersection to serve one axis for a while. A deterministic validator accepts or rejects it, "
          "and a human operator must confirm. Only use when the operator asked for a change.",
-         _obj({"intersection": {"type": "string", "enum": ["I1", "I2", "I3"]}, "axis": {"type": "string", "enum": ["A", "B"]},
+         _obj({"intersection": {"type": "string", "maxLength": 8}, "axis": {"type": "string", "enum": ["A", "B"]},
                "duration_s": {"type": "integer", "minimum": 5, "maximum": 30},
                "rationale": {"type": "string", "maxLength": 300}}, ["intersection", "axis", "rationale"]),
          propose_signal_adjustment, write=True),
@@ -192,7 +194,7 @@ def execute(tc: ToolCtx, name: str, args) -> dict:
     if tool is None:
         audit(ctx.db, who["username"], who["role"], f"llm_tool:{name}", None, None, "denied_unknown_tool")
         return {"ok": False, "content": wrap({"error": "unknown tool"})}
-    if who["role"] != "operator" or (tool.write and not tc.write_allowed):
+    if who["role"] not in ("operator", "admin") or (tool.write and not tc.write_allowed):
         audit(ctx.db, who["username"], who["role"], f"llm_tool:{name}", None, clean(args), "denied_not_permitted")
         return {"ok": False, "content": wrap({"error": "not permitted"})}
     try:

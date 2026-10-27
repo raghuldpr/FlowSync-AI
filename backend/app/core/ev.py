@@ -15,6 +15,9 @@ from .ev_warnings import LIVE, WarningLog, render
 from .routing import dijkstra, edge_costs, route_cost
 
 
+QUEUE_CLEAR_S = 1.4        # seconds a green needs per queued vehicle (discharge ~0.7 vehicles/s)
+
+
 @dataclass
 class EVSession:
     id: int
@@ -38,12 +41,14 @@ class EVManager:
         self.topo, self.store, self.db = topology, store, db
         self.log = WarningLog(db)
         self.sessions = {}
+        self.priority_enabled = True        # evaluation switches: turn each benefit off to measure it (see simulator/evaluate.py)
+        self.reroute_enabled = True
         self._lock = threading.RLock()
 
     # ---- helpers ------------------------------------------------------------------------------
     def _costs(self) -> dict:
         return edge_costs(self.topo, self.store.fresh_traffic(self.topo.control.stale_after_s),
-                          self.store.all_closed())
+                          self.store.all_closed(), self.store.hazard_penalty)
 
     def _label(self, edge_id: str) -> str:
         src = self.topo.edges[edge_id].src
@@ -57,7 +62,9 @@ class EVManager:
         with self._lock:
             if self._live_session_for(vehicle_id):
                 raise ValueError("vehicle already has an active emergency session")
-            res = dijkstra(self.topo, self._costs(), origin, destination)
+            # With rerouting off (evaluation baseline) the route is the static free-flow one: no live traffic knowledge.
+            costs = self._costs() if self.reroute_enabled else edge_costs(self.topo, {}, set())
+            res = dijkstra(self.topo, costs, origin, destination)
             if res is None:
                 raise ValueError("no route between origin and destination")
             sid = self.db.execute(
@@ -133,6 +140,8 @@ class EVManager:
         self._sync_warnings(s)
 
     def _maybe_reroute(self, s: EVSession, now: float):
+        if not self.reroute_enabled:
+            return
         node = self.topo.edges[s.edge].dst
         if node == s.destination:
             return
@@ -213,6 +222,23 @@ class EVManager:
             else:
                 self._transition(s, ap, "expired", "outside_warning_window")
 
+    def eta_table(self, s: EVSession) -> list:
+        """Remaining route as [{edge, eta_start, eta_end}] in route-time seconds, from the EV's current position."""
+        if s.edge not in s.route:
+            return []
+        costs, out, t = self._costs(), [], 0.0
+        for k in range(s.route.index(s.edge), len(s.route)):
+            e = s.route[k]
+            dur = costs.get(e, self.topo.edges[e].length / self.topo.edges[e].speed)
+            if e == s.edge:
+                dur *= (1 - s.progress)
+            out.append({"edge": e, "eta_start": t, "eta_end": t + dur})
+            t += dur
+        return out
+
+    def label(self, edge_id: str) -> str:
+        return self._label(edge_id)
+
     # ---- outputs ------------------------------------------------------------------------------
     def priority_approaches(self) -> set:
         """Approaches where signal priority is requested: the EV's current approach, and the next
@@ -224,10 +250,20 @@ class EVManager:
                     continue
                 if s.edge in self.topo.approaches:
                     out.add(s.edge)
-                i = s.route.index(s.edge)
-                if s.progress >= 0.5 and i + 1 < len(s.route) and s.route[i + 1] in self.topo.approaches:
-                    out.add(s.route[i + 1])
-        return out
+                for r in self.eta_table(s):                       # green corridor: look ahead along the route
+                    if r["edge"] in self.topo.approaches and r["eta_start"] <= self.lead_time(r["edge"]):
+                        out.add(r["edge"])
+        return out if self.priority_enabled else set()
+
+    def lead_time(self, approach: str) -> float:
+        """How many route-seconds BEFORE the EV arrives an approach must be asked to serve it.
+
+        The intersection may be mid-green (it must finish minimum green), then needs yellow + all-red, and any queue
+        in front of the EV must discharge first. Asking early enough is what turns a stop at red into a clear road.
+        """
+        tm = self.topo.timing
+        q = self.store.fresh_traffic(self.topo.control.stale_after_s).get(approach) or 0
+        return (tm.min_green_ms + tm.yellow_ms + tm.all_red_ms) / 1000.0 + 1.0 + QUEUE_CLEAR_S * q
 
     def public_warning(self, approach: str) -> Optional[dict]:
         """Redacted: text + coarse ETA band only. No vehicle id, route, position or timing."""

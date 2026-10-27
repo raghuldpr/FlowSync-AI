@@ -55,6 +55,7 @@ class Approach:
     intersection: str
     movement: str          # 'A' | 'B'
     downstream: tuple
+    capacity: int = 8      # vehicles that fit in this approach's camera ROI (default: control.link_capacity)
 
 
 @dataclass(frozen=True)
@@ -77,15 +78,19 @@ class Topology:
         self.node_labels = dict(raw.get("node_labels", {}))
         self.intersections = list(raw["intersections"])
         self.approaches = {
-            aid: Approach(aid, a["intersection"], a["movement"], tuple(a.get("downstream", [])))
+            aid: Approach(aid, a["intersection"], a["movement"], tuple(a.get("downstream", [])),
+                          int(a.get("capacity", self.control.link_capacity)))
             for aid, a in raw["approaches"].items()
         }
+        self.vision = dict(raw.get("vision", {}))
         self.nodes = list(raw["nodes"])
         self.edges = {
             e["id"]: Edge(e["id"], e["from"], e["to"], float(e["length"]), float(e["speed"]))
             for e in raw["edges"]
         }
         for a in self.approaches.values():
+            if a.capacity < 1:
+                raise ValueError(f"approach {a.id}: capacity must be >= 1")
             if a.movement not in ("A", "B"):
                 raise ValueError(f"approach {a.id}: movement must be A or B")
             if a.intersection not in self.intersections:

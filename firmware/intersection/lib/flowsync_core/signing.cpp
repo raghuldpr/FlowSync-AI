@@ -4,7 +4,7 @@
 
 #include "sha256.h"
 
-namespace fsync {
+namespace flowsync {
 
 static void u32_dec(uint32_t v, char* out) {
   char tmp[11];
@@ -28,4 +28,4 @@ void sign_request(const char* key, const char* method, const char* path, const c
   to_hex(mac, 32, out_hex);
 }
 
-}  // namespace fsync
+}  // namespace flowsync

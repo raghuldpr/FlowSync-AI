@@ -22,6 +22,8 @@ class Controller:
         self.intersection_device = intersection_device     # 'I1' -> 'intersection-1'
         self.extra_emergency = lambda: set()               # EV manager plugs in tracked-EV approaches
         self.operator_requests = {}                        # intersection -> {target, until, proposal_id}
+        self.last_cycle_t = None                           # heartbeat for the health check
+        self.metrics = None
 
     def emergency_approaches(self) -> set:
         rows = self.db.query("SELECT approach FROM emergency_requests WHERE status='active'")
@@ -36,9 +38,15 @@ class Controller:
 
     # ---- scoring ------------------------------------------------------------------------------
     def axis_score(self, inter: str, axis: str, queues: dict):
-        """Returns (score or None if no usable inputs, notes list)."""
+        """Returns (pressure or None if no usable inputs, notes, blocked, demand).
+
+        pressure = sum over the axis' approaches of max(0, Q_up - max Q_down): who to prefer when both axes want green.
+        demand   = vehicles actually waiting on approaches that are free to discharge (downstream known and not full):
+                   whether the axis has anyone to serve at all. Starvation rules use demand, because a lone vehicle behind
+                   a congested downstream link has zero pressure but still has to be served eventually.
+        """
         c = self.topo.control
-        total, used, notes, blocked = 0.0, False, [], False
+        total, used, notes, blocked, demand = 0.0, False, [], False, 0
         for a in self.topo.approaches_of(inter, axis):
             q = queues.get(a.id)
             if q is None:
@@ -49,23 +57,25 @@ class Controller:
                 notes.append(f"{a.id}:downstream_stale")
                 continue
             used = True
-            if any(d / c.link_capacity >= c.spillback_occupancy for d in downs):
+            if any(dv / self.topo.approaches[did].capacity >= c.spillback_occupancy
+                   for did, dv in zip(a.downstream, downs)):
                 notes.append(f"{a.id}:spillback")
                 blocked = blocked or q > 0
                 continue
             total += max(0.0, q - (max(downs) if downs else 0))
-        return (total if used else None), notes, blocked
+            demand += q
+        return (total if used else None), notes, blocked, demand
 
     # ---- decision -----------------------------------------------------------------------------
     def decide(self, inter: str, queues: dict, emergency_approaches: set) -> dict:
         c, tm = self.topo.control, self.topo.timing
-        scores, notes, blocked = {}, [], {}
+        scores, notes, blocked, demand = {}, [], {}, {}
         for ax in ("A", "B"):
-            scores[ax], n, blocked[ax] = self.axis_score(inter, ax, queues)
+            scores[ax], n, blocked[ax], demand[ax] = self.axis_score(inter, ax, queues)
             notes += n
         # gridlock = both axes have waiting vehicles that spillback is holding back
         gridlock = all(blocked[ax] and not scores[ax] for ax in ("A", "B"))
-        inputs = {"scores": scores, "notes": notes}
+        inputs = {"scores": scores, "notes": notes, "demand": demand}
         act = self.store.get_actual(inter, c.stale_after_s)
         ev_axes = sorted({self.topo.approaches[a].movement for a in emergency_approaches
                           if a in self.topo.approaches and self.topo.approaches[a].intersection == inter})
@@ -107,9 +117,9 @@ class Controller:
         if gridlock and el >= tm.max_green_ms:
             # every axis is blocked: spillback would starve both, so rotate to bound green/red times
             return {"target": o, "reason": "gridlock_rotation", "inputs": inputs}
-        if el >= tm.max_green_ms and s(o) > 0:
+        if el >= tm.max_green_ms and demand[o] > 0:                 # starvation guard: anyone waiting is served within max green
             return {"target": o, "reason": "max_green_reached", "inputs": inputs}
-        if switch_ok and s(g) == 0 and s(o) > 0:
+        if switch_ok and demand[g] == 0 and demand[o] > 0:          # nobody left to serve here, somebody waiting there
             return {"target": o, "reason": "current_axis_empty", "inputs": inputs}
         if switch_ok and s(o) > s(g) + c.switch_margin:
             return {"target": o, "reason": "higher_pressure", "inputs": inputs}
@@ -117,6 +127,8 @@ class Controller:
 
     # ---- cycle --------------------------------------------------------------------------------
     def cycle(self) -> list:
+        import time as _time
+        _t0 = _time.perf_counter()
         c, tm = self.topo.control, self.topo.timing
         queues = self.store.fresh_traffic(c.stale_after_s)
         emergencies = self.emergency_approaches()
@@ -148,4 +160,7 @@ class Controller:
                         (device, cmd["seq"], inter, d["target"], d["reason"], now_iso()))
             self.store.last_full[inter] = {"target": d["target"], "reason": d["reason"], "inputs": d["inputs"]}
             decisions.append({**d, "intersection": inter})
+        self.last_cycle_t = self.store.clock()
+        if self.metrics:
+            self.metrics.observe("controller_cycle_ms", (_time.perf_counter() - _t0) * 1000.0)
         return decisions

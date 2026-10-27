@@ -8,7 +8,7 @@
 
 #include "signal_fsm.h"
 
-namespace fsync {
+namespace flowsync {
 
 constexpr uint8_t kAllRedRegister = 0x09;   // A_R | B_R
 
@@ -26,4 +26,4 @@ struct Hal595 {
 // regs[0] = intersection I1 (nearest the MCU) ... regs[2] = I3.
 void write_chain(Hal595& hal, const uint8_t regs[3]);
 
-}  // namespace fsync
+}  // namespace flowsync

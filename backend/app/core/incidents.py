@@ -8,18 +8,16 @@ Detected types (deterministic rules, thresholds in topology.yaml):
 Lifecycle: open -> acknowledged -> resolved (by operator or automatically). All operator actions are audited
 by the API layer.
 """
-import itertools
 import json
 import threading
 from typing import Optional
 
 from ..audit import event
 from ..db import now_iso
-from .routing import dijkstra, edge_costs
+from .routing import edge_costs, path_to, shortest_tree
 
 TYPES = ("congestion_spike", "stalled_vehicle")
 SEVERITY = {"congestion_spike": "medium", "stalled_vehicle": "high"}
-EXT_NODES = ("ext_W", "ext_E", "ext_S")
 
 
 class IncidentManager:
@@ -27,6 +25,7 @@ class IncidentManager:
         self.topo, self.store, self.db = topology, store, db
         self._lock = threading.RLock()
         self._cong = {}                                        # approach -> {since, clear}
+        self._delay_cache = {}                                 # incident id -> (time, max added delay)
         self.open = {}                                         # (type, approach) -> incident id
         for r in db.query("SELECT id,type,approach FROM incidents WHERE status!='resolved'"):
             self.open[(r["type"], r["approach"])] = r["id"]
@@ -76,11 +75,10 @@ class IncidentManager:
         with self._lock:
             now, c = self.store.clock(), self.topo.incidents
             stale = self.topo.control.stale_after_s
-            cap = self.topo.control.link_capacity
             for a, ap in self.topo.approaches.items():
                 rec = self.store.fresh_record(a, stale)
-                self._congestion(a, rec, now, cap, c)
-                self._stall(a, ap, rec, cap, c, stale)
+                self._congestion(a, rec, now, ap.capacity, c)
+                self._stall(a, ap, rec, c, stale)
 
     def _congestion(self, a, rec, now, cap, c):
         st = self._cong.setdefault(a, {"since": None, "clear": None})
@@ -107,7 +105,7 @@ class IncidentManager:
             else:
                 st["clear"] = None
 
-    def _stall(self, a, ap, rec, cap, c, stale):
+    def _stall(self, a, ap, rec, c, stale):
         key = ("stalled_vehicle", a)
         if rec is None:
             return
@@ -121,8 +119,9 @@ class IncidentManager:
             return
         if act["elapsed_ms"] / 1000 < c.stall_s or rec["stationary_s"] < c.stall_s or rec["count"] < 1:
             return
-        downs = [self.store.fresh_record(d, stale) for d in ap.downstream]
-        if any(d is None or d["count"] / cap >= self.topo.control.spillback_occupancy for d in downs):
+        downs = [(d, self.store.fresh_record(d, stale)) for d in ap.downstream]
+        if any(r is None or r["count"] / self.topo.approaches[d].capacity >= self.topo.control.spillback_occupancy
+               for d, r in downs):
             return                                             # downstream full or unknown: not attributable to a stall
         self.create("stalled_vehicle", a, "detector", {"stationary_s": round(rec["stationary_s"], 1),
                                                        "green_elapsed_s": round(act["elapsed_ms"] / 1000, 1)})
@@ -136,31 +135,52 @@ class IncidentManager:
         other_closed = self.store.all_closed() - {approach}
         base_q = dict(queues)
         base_q[approach] = 0                                   # what the edge would cost without the incident
-        base = edge_costs(t, base_q, other_closed)
+        pen = self.store.hazard_penalty                        # hazards are not part of THIS incident's delay: same in both
+        base = edge_costs(t, base_q, other_closed, pen)
         with_inc_closed = other_closed | ({approach} if type_ == "stalled_vehicle" else set())
-        inc = edge_costs(t, queues, with_inc_closed)
+        inc = edge_costs(t, queues, with_inc_closed, pen)
         pairs, worst = [], 0.0
         unreachable = []
-        for o, d in itertools.permutations(EXT_NODES, 2):
-            b, n = dijkstra(t, base, o, d), dijkstra(t, inc, o, d)
-            if b is None or approach not in b[0]:
-                continue                                       # this trip never used the affected edge
-            if n is None:
-                unreachable.append(f"{o}->{d}")
-                pairs.append({"from": o, "to": d, "base_path": b[0], "base_cost_s": round(b[1], 1),
-                              "alt_path": None, "alt_cost_s": None, "added_delay_s": None, "rerouted": False})
-                continue
-            added = max(0.0, n[1] - b[1])
-            worst = max(worst, added)
-            pairs.append({"from": o, "to": d, "base_path": b[0], "base_cost_s": round(b[1], 1),
-                          "alt_path": n[0], "alt_cost_s": round(n[1], 1), "added_delay_s": round(added, 1),
-                          "rerouted": n[0] != b[0]})
+        ext = [n for n in t.nodes if n not in t.intersections]
+        for o in ext:                                          # one shortest-path tree per origin answers every destination
+            bd, bp = shortest_tree(t, base, o)
+            nd, np_ = shortest_tree(t, inc, o)
+            for d in ext:
+                if d == o:
+                    continue
+                bpath = path_to(bp, o, d)
+                if bpath is None or approach not in bpath:
+                    continue                                   # this trip never used the affected edge
+                npath = path_to(np_, o, d)
+                if npath is None:
+                    unreachable.append(f"{o}->{d}")
+                    pairs.append({"from": o, "to": d, "base_path": bpath, "base_cost_s": round(bd[d], 1),
+                                  "alt_path": None, "alt_cost_s": None, "added_delay_s": None, "rerouted": False})
+                    continue
+                added = max(0.0, nd[d] - bd[d])
+                worst = max(worst, added)
+                pairs.append({"from": o, "to": d, "base_path": bpath, "base_cost_s": round(bd[d], 1),
+                              "alt_path": npath, "alt_cost_s": round(nd[d], 1), "added_delay_s": round(added, 1),
+                              "rerouted": npath != bpath})
         feeders = [x.id for x in t.approaches.values() if approach in x.downstream]
         edges = [approach] + feeders
         return {"affected_edges": edges,
                 "affected_intersections": sorted({t.approaches[e].intersection for e in edges}),
                 "routes_affected": len(pairs), "max_added_delay_s": round(worst, 1),
                 "unreachable_pairs": unreachable, "pairs": pairs}
+
+    def road_events(self) -> list:
+        """Open incidents as alert sources for road users (fixed wording is applied by the road-user manager)."""
+        what = {"congestion_spike": "heavy queue", "stalled_vehicle": "stalled vehicle"}
+        out, now = [], self.store.clock()
+        for r in self.db.query("SELECT id,type,approach FROM incidents WHERE status!='resolved'"):
+            hit = self._delay_cache.get(r["id"])
+            if hit is None or now - hit[0] > 3.0:              # impact is recomputed at most every 3 s per incident
+                hit = (now, self.impact(r["type"], r["approach"])["max_added_delay_s"])
+                self._delay_cache[r["id"]] = hit
+            out.append({"key": f"inc:{r['id']}", "kind": "incident", "edge": r["approach"], "what": what.get(r["type"], "incident"),
+                        "delay": hit[1]})
+        return out
 
     # ---- reads --------------------------------------------------------------------------------
     def list(self, status: str = None, limit: int = 50) -> list:

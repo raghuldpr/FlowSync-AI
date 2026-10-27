@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FlowSync Presenter</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  body { padding: 20px 28px; font-size: 18px; }
+  header { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  header h1 { font-size: 28px; }
+  .bar { height: 10px; background: var(--chip); border-radius: 5px; margin: 14px 0; }
+  .bar > div { height: 10px; background: var(--accent); border-radius: 5px; transition: width .8s linear; }
+  .stage { padding: 22px 26px; border-radius: 16px; border: 2px solid var(--line); background: var(--panel); margin-bottom: 18px; min-height: 150px; }
+  .stage h2 { font-size: 34px; text-transform: none; letter-spacing: 0; color: var(--ink); margin: 0 0 10px; }
+  .stage p { font-size: 24px; margin: 0; }
+  .cue { color: var(--warn); margin-top: 12px; font-size: 20px; }
+  .grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 18px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .check { display: flex; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+  .check .i { width: 1.4em; font-weight: 700; text-align: center; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
+  .tiles { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+  .tile { background: var(--chip); border-radius: 12px; padding: 10px 16px; font-size: 16px; }
+  .tile b { display: block; font-size: 30px; }
+  #login { position: fixed; inset: 0; background: rgba(10, 14, 22, .7); display: none; align-items: center; justify-content: center; }
+  #login form { display: grid; gap: 10px; width: min(360px, 92vw); }
+</style>
+</head>
+<body>
+<header><h1 id="title">FlowSync AI</h1><span id="state" class="chip stale">idle</span><span id="world" class="chip"></span>
+  <span style="flex:1"></span><a class="muted" href="operator.html">Operator ↗</a></header>
+<div class="bar"><div id="bar" style="width:0%"></div></div>
+<div class="stage" aria-live="polite"><h2 id="step">Waiting for a scenario…</h2><p id="narr">Start one from the operator dashboard.</p><div id="cue" class="cue"></div></div>
+<div class="grid">
+  <section class="panel"><h2>Self-checks</h2><div id="checks"></div><div id="tiles" class="tiles"></div></section>
+  <section class="panel"><h2>What is built, what is simulated</h2><div id="prov"></div></section>
+</div>
+<div id="login"><form class="panel" id="login-form"><h1>Operator login</h1><input id="p" type="password" placeholder="password" autocomplete="current-password" aria-label="Password"><div id="err" class="bad"></div><button>Log in</button></form></div>
+<script src="presenter.js"></script>
+</body>
+</html>

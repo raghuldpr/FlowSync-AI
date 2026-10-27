@@ -39,6 +39,33 @@ layout:                          # dashboard map coordinates (viewBox 0 0 800 52
   I1: [240, 170]
   I2: [560, 170]
   I3: [400, 350]
+# Overhead-camera vision (Phase 7). Coordinates are the dashboard LAYOUT units above: draw/measure the physical table
+# in the same frame (e.g. 1 unit = 1 mm for an 80 x 52 cm board). See docs/VISION_SETUP.md.
+vision:
+  canvas: [800, 520]                  # size of the rectified top-down image (1 px = 1 layout unit)
+  corner_markers: {10: [40, 40], 11: [760, 40], 12: [760, 480], 13: [40, 480]}   # ArUco ids -> marker centres (upright)
+  corner_marker_size: 40
+  ev_markers: {20: EV-1}              # ArUco id on the connected car -> vehicle id. Marker UP = direction the car faces.
+  ev_marker_size: 28
+  aruco_dictionary: DICT_4X4_50
+  max_calibration_error: 6.0          # mean reprojection error (layout units) above which a calibration is rejected
+  lane_offset: 14                     # lane centre-line offset from the road axis (the dashboard map uses the same value).
+                                      # Must satisfy roi_half_width < lane_offset so opposite lanes' ROIs never overlap.
+  node_radius: 30                     # intersection box radius
+  ext_radius: 12                      # external node radius
+  roi_exit_clearance: 30              # skip this much of a lane right after it leaves an intersection (the junction's own
+                                      # lanes are closer than a lane-width there and would double-count)
+  roi_start: 0.0                      # ROI covers this fraction ... of the lane (after node radii) ...
+  roi_end: 1.0                        # ... to this fraction
+  roi_half_width: 10                  # car_width/2 plus a little lateral slack
+  car_length: 28                      # typical vehicle footprint, layout units
+  car_width: 16
+  car_gap: 6                          # queue spacing used for capacity estimates
+  min_blob_fraction: 0.35             # a blob smaller than this share of a car is noise
+  diff_threshold: 40                  # grey-level difference against the empty-table reference
+  stationary_iou: 0.85                # ROI foreground overlap above which nothing is considered to have moved
+  ev_snap_distance: 24                # max distance from a lane centre-line to map the EV marker onto that road
+  post_hz: 2.0
 node_labels:
   ext_W: the West
   ext_E: the East

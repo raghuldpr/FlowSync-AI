@@ -24,9 +24,11 @@ def verify_password(password: str, stored: str) -> bool:
         return False
 
 
-def seed_operator(db: Database, password: str, username: str = "operator"):
-    if db.one("SELECT 1 FROM users WHERE username=?", (username,)) is None:
-        db.execute("INSERT INTO users VALUES(?,?,?,?)", (username, "operator", hash_password(password), now_iso()))
+def seed_users(db: Database, passwords: dict):
+    """passwords: {role: password}. One account per role (viewer, operator, admin); existing accounts are left alone."""
+    for role, password in passwords.items():
+        if db.one("SELECT 1 FROM users WHERE username=?", (role,)) is None:
+            db.execute("INSERT INTO users VALUES(?,?,?,?)", (role, role, hash_password(password), now_iso()))
 
 
 def login(db: Database, username: str, password: str, ttl_s: int):

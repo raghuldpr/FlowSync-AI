@@ -3,7 +3,7 @@
 #pragma once
 #include <stdint.h>
 
-namespace fsync {
+namespace flowsync {
 
 struct Timing {
   uint32_t min_green_ms, yellow_ms, all_red_ms, max_green_ms, max_red_ms;
@@ -55,4 +55,4 @@ class SignalFsm {
   int64_t last_seq_;
 };
 
-}  // namespace fsync
+}  // namespace flowsync

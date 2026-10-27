@@ -7,6 +7,12 @@ devices:
   camera-1:
     key: dev-camera-1-change-me
     role: camera
+  roadcam-1:                          # ESP32-CAM on the connected car (Tier 2: road-surface images)
+    key: dev-roadcam-1-change-me
+    role: road_camera
+  simulator-1:                        # the virtual tabletop's control channel (scenario commands). Remove on the real demo
+    key: dev-simulator-1-change-me    # if no simulator is used.
+    role: simulator
   car-1:
     key: dev-car-1-change-me
     role: ev_car

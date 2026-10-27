@@ -8,6 +8,18 @@ TERMINAL = ("cancelled_passed", "cancelled_route_change", "cancelled_stale", "ex
 
 TEMPLATES = {
     "approaching": "Emergency vehicle approaching from {origin}. Make way only when it is safe and lawful to do so.",
+    # road-user (phone) alerts: still fixed, reviewed wording - never generated text
+    "ev_updated": "Emergency vehicle still approaching from {origin}. Make way only when it is safe and lawful to do so.",
+    "ev_redirected": "Emergency vehicle route changed; it is now approaching from {origin}. Make way only when it is safe and lawful to do so.",
+    "ev_passed": "The emergency vehicle has passed. Continue as normal, following road signs and signals.",
+    "ev_route_changed": "The emergency vehicle is no longer coming your way. Continue as normal, following road signs and signals.",
+    "ev_stale": "Emergency vehicle location is unknown. Continue as normal, following road signs and signals.",
+    "incident_ahead": "Incident ahead on {road}: {what}. Expect about {delay} s extra delay.",
+    "incident_cleared": "The incident on {road} has been cleared.",
+    "suggest_route": "Suggested alternative route: {route}. It could save about {saves} s.",
+    "route_closed": "Your route changed because the road ahead is closed. New route: {route}.",
+    "hazard_ahead": "Road hazard ahead on {road}: {what}. Drive with extra care.",
+    "hazard_cleared": "The road hazard on {road} has been cleared.",
 }
 
 # Review aid: phrases that must never appear in driver-facing text.

@@ -14,7 +14,7 @@
 #include "signal_fsm.h"
 #include "signing.h"
 
-using namespace fsync;
+using namespace flowsync;
 
 static std::string read_all() {
   std::string s;

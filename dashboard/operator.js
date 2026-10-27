@@ -6,7 +6,7 @@ const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n
 
 let token = null;
 try { token = sessionStorage.getItem("fs_token"); } catch (e) { /* storage may be blocked */ }
-let topo = null, data = null, tab = "events", busy = false;
+let topo = null, data = null, tab = "events", busy = false, replaying = false, replayTimer = null, replayRuns = null;
 
 const REASONS = {
   keep_current: "Holding green: no stronger demand on the other axis",
@@ -53,6 +53,15 @@ document.addEventListener("click", (e) => {      // delegated: survives re-rende
   else if (b.id === "ev-go") post("/api/operator/ev", { vehicle_id: $("#ev-id").value, origin: $("#ev-o").value, destination: $("#ev-d").value });
   else if (b.id === "cl-close") post(`/api/operator/edges/${$("#cl-edge").value}/closed`, { closed: true });
   else if (b.id === "cl-open") post(`/api/operator/edges/${$("#cl-edge").value}/closed`, { closed: false });
+  else if (d.hv) post(`/api/operator/hazards/${d.hv}/verify`);
+  else if (d.hr) post(`/api/operator/hazards/${d.hr}/reject`);
+  else if (d.hx) post(`/api/operator/hazards/${d.hx}/resolve`);
+  else if (d.himg) showImage(b, d.himg);
+  else if (b.id === "hz-go") post("/api/operator/hazards", { kind: $("#hz-kind").value, edge: $("#hz-edge").value, severity: $("#hz-sev").value });
+  else if (b.id === "rp-play") startReplay();
+  else if (b.id === "rp-stop") stopReplay();
+  else if (b.id === "scn-start") post("/api/operator/scenario/start", { id: $("#scn-id").value });
+  else if (b.id === "scn-stop") post("/api/operator/scenario/stop");
 });
 
 function showLogin() { $("#login").style.display = "flex"; $("#logout").hidden = true; }
@@ -83,7 +92,7 @@ function buildMap() {
   for (const e of topo.edges) {
     const a = N[e.src], b = N[e.dst];
     const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy), ux = dx / len, uy = dy / len;
-    const off = 8, ox = -uy * off, oy = ux * off;
+    const off = topo.lane_offset || 8, ox = -uy * off, oy = ux * off;
     const sa = a.kind === "intersection" ? 30 : 12, sb = b.kind === "intersection" ? 30 : 12;
     const g = { x1: a.x + ux * sa + ox, y1: a.y + uy * sa + oy, x2: b.x - ux * sb + ox, y2: b.y - uy * sb + oy, ux, uy, ox, oy };
     geom[e.id] = g;
@@ -117,13 +126,13 @@ const LAMP = () => ({ R: css("--lamp-r"), Y: css("--lamp-y"), G: css("--lamp-g")
 function pointOn(edge, p) { const g = geom[edge]; return { x: g.x1 + (g.x2 - g.x1) * p, y: g.y1 + (g.y2 - g.y1) * p }; }
 
 function drawMap(d) {
-  const cap = topo.capacity, closed = new Set(d.closed_edges), lamp = LAMP();
+  const closed = new Set(d.closed_edges), lamp = LAMP();
   for (const e of topo.edges) {
     const line = $("#edge-" + e.id), q = $("#q-" + e.id), t = d.traffic[e.id];
     let col = css("--road"), label = "";
     if (e.approach) {
       if (!t || t.stale) { col = css("--road"); label = t ? "?" : ""; }
-      else { col = occColor(t.count / cap); label = t.count; }
+      else { col = occColor(t.count / (topo.capacities[e.id] || topo.capacity)); label = t.count; }
     }
     line.setAttribute("stroke", closed.has(e.id) ? css("--bad") : col);
     line.setAttribute("stroke-dasharray", closed.has(e.id) ? "3 7" : "");
@@ -157,6 +166,13 @@ function drawMap(d) {
       const t = el("text", { y: 4, "text-anchor": "middle", "font-size": 9, "font-weight": 700, fill: "#fff" }, m); t.textContent = "EV";
       el("title", {}, m).textContent = `${s.vehicle_id} on ${s.edge}${s.stale ? " (location stale)" : ""}`;
     }
+  }
+  for (const h of d.hazards || []) {                       // road hazards: diamond (grey = unreviewed report)
+    const g = geom[h.edge]; if (!g) continue;
+    const p = pointOn(h.edge, h.progress ?? 0.35);
+    const m = el("g", { transform: `translate(${p.x - g.ox * 1.2},${p.y - g.oy * 1.2})` }, layers.over);
+    el("path", { d: "M0,-10 L10,0 L0,10 L-10,0 Z", fill: h.status === "open" ? css("--warn") : css("--stale"), stroke: "#fff", "stroke-width": 1.5 }, m);
+    el("title", {}, m).textContent = `#${h.id} ${h.kind} on ${h.edge} (${h.status})`;
   }
   for (const inc of d.incidents) {
     const g = geom[inc.approach]; if (!g) continue;
@@ -236,6 +252,16 @@ function drawIncidents(d) {
 const SEV = { info: "", warning: "warn", error: "bad", critical: "bad" };
 async function drawTab(d) {
   const body = $("#tab-body");
+  if (tab !== "replay") body._h = null;                 // the replay tab uses setHtml's cache; other tabs write directly
+  if (tab === "replay") {
+    if (!replayRuns) { try { replayRuns = await api("GET", "/api/operator/replays"); } catch (e) { replayRuns = []; } }
+    const opts = replayRuns.map((r) => `<option value="${esc(r.run_id)}">${esc(r.title)} · ${esc(r.started_at.slice(11, 19))} · ${r.frames} frames</option>`).join("") || "<option value=''>no recordings yet</option>";
+    setHtml("#tab-body", `<p class="muted" style="margin:0 0 6px">Every scenario run is recorded second by second. Replay one on the map: demo insurance, and a way to review what happened.</p>
+      <div class="row"><select id="rp-run" aria-label="Recorded run" style="flex:1;min-width:0">${opts}</select>
+      <select id="rp-speed" aria-label="Speed"><option value="1">1×</option><option value="2">2×</option><option value="4" selected>4×</option></select>
+      <button id="rp-play">▶ Replay</button><button class="ghost" id="rp-stop">■ Stop</button></div><div id="rp-info" style="margin-top:8px"></div>`);
+    return;
+  }
   if (tab === "events") {
     body.innerHTML = `<table>${d.events.map((e) => `<tr><td class="mono muted">${esc(e.ts.slice(11, 19))}</td><td><span class="chip ${SEV[e.severity] || ""}">${esc(e.severity)}</span></td><td>${esc(e.type)}</td><td class="mono muted">${esc((e.payload || "").slice(0, 110))}</td></tr>`).join("")}</table>`;
   } else if (tab === "wlog") {
@@ -244,19 +270,78 @@ async function drawTab(d) {
     const rows = await api("GET", "/api/operator/audit?limit=60");
     body.innerHTML = `<table><tr><th>time</th><th>actor</th><th>role</th><th>action</th><th>result</th></tr>${rows.map((r) => `<tr><td class="mono muted">${esc(r.ts.slice(11, 19))}</td><td>${esc(r.actor)}</td><td>${esc(r.role)}</td><td>${esc(r.action)} ${esc(r.target || "")}</td><td><span class="chip ${r.result === "ok" ? "ok" : "bad"}">${esc(r.result)}</span></td></tr>`).join("")}</table>`;
   } else {
-    const srcs = [...new Set(Object.values(d.traffic).map((t) => t.source))];
-    const simulated = srcs.includes("simulated");
-    const R = (c, s, n) => `<tr><td>${c}</td><td><span class="chip ${s === "Built" ? "ok" : s === "Simulated" ? "warn" : "stale"}">${s}</span></td><td class="muted">${n}</td></tr>`;
-    body.innerHTML = `<table><tr><th>Component</th><th>Status</th><th>Note</th></tr>
-      ${R("Signal controller, safety rules, device API", "Built", "deterministic backend; HMAC-signed devices")}
-      ${R("Intersection controller + queues", simulated ? "Simulated" : "Built", simulated ? "virtual tabletop is feeding live data" : "hardware / camera source: " + esc(srcs.join(", ")))}
-      ${R("EV tracking & localisation", simulated ? "Simulated" : "Built", "scripted positions until the ArUco camera is connected (Phase 7)")}
-      ${R("Routing, reroute hysteresis, EV warnings", "Built", "Dijkstra on the tabletop graph")}
-      ${R("Incident detection, impact, alerts", "Built", "congestion + stalled vehicle")}
-      ${R("Roles, audit log, public redaction", "Built", "operator login; denials are logged")}
-      ${R("LLM reasoning layer", "Built", d.llm.enabled ? "live model: " + esc(d.llm.model) + " (non-authoritative)" : "implemented; running in deterministic-fallback mode (no model configured)")}
-      ${R("Pothole detection, SUMO scale-up", "Not built", "Tier 2")}</table>`;
+    body.innerHTML = provenanceTable(d.provenance);
   }
+}
+
+/* ---------- road conditions ---------- */
+async function showImage(btn, id) {                      // images are operator-only: fetch with the token, show as a blob
+  try {
+    const r = await fetch(`/api/operator/images/${id}`, { headers: { Authorization: "Bearer " + token } });
+    if (!r.ok) throw new Error("image unavailable");
+    const img = document.createElement("img");
+    img.src = URL.createObjectURL(await r.blob()); img.alt = "road camera frame"; img.style.cssText = "max-width:100%;border-radius:6px;margin-top:6px;display:block";
+    btn.replaceWith(img);
+  } catch (e) { toast(e.message); }
+}
+function drawHazards(d) {
+  const hz = d.hazards || [], pending = hz.filter((h) => h.status === "reported").length;
+  const c = $("#hz-count"); c.textContent = hz.length ? `${hz.length}${pending ? " · " + pending + " to review" : ""}` : "0"; c.className = "chip " + (pending ? "bad" : hz.length ? "warn" : "stale");
+  setHtml("#hz-edge", topo.edges.map((e) => `<option>${e.id}</option>`).join(""));
+  if (!hz.length) { setHtml("#hazards", "<p class='muted' style='margin:0'>No active road hazards.</p>"); return; }
+  setHtml("#hazards", hz.map((h) => `<div class="incident ${h.status === "open" ? "medium" : ""}" style="${h.status === "reported" ? "border-left:4px solid var(--stale)" : ""}">
+    <div class="row"><b>#${h.id} ${esc(h.kind)}</b> on ${esc(h.edge)} <span class="chip ${h.severity === "high" ? "bad" : h.severity === "medium" ? "warn" : ""}">${esc(h.severity)}</span>
+      <span class="chip ${h.status === "open" ? "ok" : "stale"}">${h.status === "reported" ? "unreviewed" : esc(h.status)}</span>
+      <span class="muted">${esc(h.source)}${h.confidence != null ? " · " + Math.round(h.confidence * 100) + "% confidence (heuristic)" : ""}</span></div>
+    ${h.image_id ? `<button class="ghost" data-himg="${esc(h.image_id)}">Show camera frame</button>` : ""}
+    <div class="row" style="margin-top:6px">${h.status === "reported" ? `<button data-hv="${h.id}">Verify</button><button class="ghost" data-hr="${h.id}">Reject</button>` : `<button class="ghost" data-hx="${h.id}">Resolve</button>`}</div></div>`).join(""));
+}
+
+/* ---------- replay ---------- */
+function stopReplay() {
+  replaying = false; clearInterval(replayTimer);
+  const i = $("#rp-info"); if (i) i.textContent = "Stopped. The map shows live data again.";
+}
+async function startReplay() {
+  const id = $("#rp-run").value; if (!id) return;
+  stopReplay();
+  const rec = await api("GET", `/api/operator/replays/${id}`);
+  const speed = Number($("#rp-speed").value), frames = rec.frames; let i = 0;
+  replaying = true;
+  replayTimer = setInterval(() => {
+    const f = frames[Math.min(i, frames.length - 1)];
+    drawMap({ traffic: f.traffic, signals: f.signals, ev: f.ev, incidents: f.incidents, hazards: f.hazards, closed_edges: f.closed_edges });
+    const info = $("#rp-info");
+    if (info) info.innerHTML = `<b>REPLAY</b> · ${esc(rec.run.title)} · t=${f.t}s of ${frames[frames.length - 1].t}s · road users ${f.road_users}<br>${f.step ? `<b>${esc(f.step.title)}</b><div>${esc(f.step.narration)}</div>` : ""}<div class="mono muted">${f.events.map(esc).join("<br>")}</div>`;
+    if (++i >= frames.length) { clearInterval(replayTimer); replaying = false; }
+  }, 1000 / speed);
+}
+
+const PROV_CLASS = { Built: "ok", Simulated: "warn", Replay: "warn", "Not connected": "bad", Idle: "stale", "Not built": "stale" };
+function provenanceTable(rows) {
+  return `<p class="muted" style="margin:0 0 6px">Derived live from what each data path reports about itself.</p><table><tr><th>Component</th><th>Status</th><th>What it is right now</th></tr>` +
+    rows.map((r) => `<tr><td>${esc(r.component)}</td><td><span class="chip ${PROV_CLASS[r.status] || "stale"}">${esc(r.status)}</span></td><td class="muted">${esc(r.detail)}</td></tr>`).join("") + "</table>";
+}
+
+/* ---------- scenario panel ---------- */
+const STEP_ICON = (s) => !s.expect ? (s.state === "done" ? "•" : "○") : s.expect.ok === true ? "✓" : s.expect.ok === false ? "✗" : s.state === "done" ? "…" : "○";
+function drawScenario(d) {
+  const s = d.scenario;
+  setHtml("#scn-id", s.scenarios.map((x) => `<option value="${esc(x.id)}">${x.kind === "drill" ? "Drill: " : ""}${esc(x.title)}</option>`).join(""));
+  const st = $("#scn-state"), w = $("#scn-world");
+  st.textContent = s.state; st.className = "chip " + ({ running: "ok", finished: "ok", stopped: "warn", idle: "stale" }[s.state] || "stale");
+  w.textContent = s.world === "simulator" ? "world: simulator" : "world: physical table (follow the cues)";
+  w.className = "chip " + (s.world === "simulator" ? "warn" : "ok");
+  $("#scn-start").disabled = s.state === "running"; $("#scn-stop").disabled = s.state !== "running";
+  if (s.state === "idle") { setHtml("#scn-body", `<p class="muted" style="margin:6px 0 0">Pick a scenario and press Start. It runs on the same APIs and safety rules as live traffic; each step checks itself.</p>`); return; }
+  const pct = Math.min(100, Math.round(100 * s.t / s.duration));
+  const cur = s.current;
+  const sum = s.summary ? `<div class="row" style="margin-top:6px">${Object.entries({ "checks": `${s.summary.checks_passed}/${s.summary.checks_total}`, "EV travel (simulated s)": s.summary.ev_travel_s, "reroutes": s.summary.reroutes,
+    "priority decisions": s.summary.emergency_priority_decisions, "incidents": s.summary.incidents_opened }).filter(([, v]) => v !== undefined && v !== null).map(([k, v]) => `<span class="chip ok">${esc(k)}: <b>${esc(v)}</b></span>`).join("")}</div>` : "";
+  setHtml("#scn-body", `<div style="height:6px;background:var(--chip);border-radius:3px;margin:8px 0"><div style="height:6px;width:${pct}%;background:var(--accent);border-radius:3px"></div></div>
+    <div class="muted mono">${s.t}s / ${s.duration}s · started by ${esc(s.started_by)}</div>
+    ${cur ? `<div style="margin:6px 0"><b>${esc(cur.title)}</b><div>${esc(cur.narration)}</div>${s.world === "physical" && cur.cue ? `<div style="color:var(--warn)">▶ On the table: ${esc(cur.cue)}</div>` : ""}</div>` : ""}
+    <table>${s.steps.map((x) => `<tr style="opacity:${x.state === "pending" ? 0.5 : 1}"><td class="mono">${x.at}s</td><td>${STEP_ICON(x)}</td><td>${esc(x.title)}${x.expect ? `<div class="muted" style="font-size:12px">${esc(x.expect.desc)}${x.expect.detail ? " — " + esc(x.expect.detail) : ""}</div>` : ""}</td></tr>`).join("")}</table>${sum}`);
 }
 document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => {
   tab = b.dataset.tab; document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("on", x === b)); if (data) drawTab(data);
@@ -297,6 +382,8 @@ function drawHeader(d) {
   const m = $("#mode");
   m.textContent = srcs.length ? (srcs.includes("simulated") ? "SIMULATED DATA" : "LIVE: " + srcs.join(", ")) : "no traffic data";
   m.className = "chip " + (srcs.includes("simulated") ? "warn" : srcs.length ? "ok" : "stale");
+  const ru = d.road_users, warned = ru.filter((u) => Object.values(u.alerts).some((s) => ["active", "updated", "redirected"].includes(s))).length;
+  setHtml("#roadusers", `<a class="chip ${ru.length ? "ok" : "stale"}" href="driver.html" target="_blank" rel="noopener" title="Open the road-user page (share this link / QR with the audience)">road users: ${ru.length}${ru.length ? ` · alerted: ${warned}` : ""}</a>`);
   $("#devices").innerHTML = d.devices.map((x) => `<span class="chip ${x.age_s == null ? "stale" : x.age_s > 5 ? "warn" : "ok"}" title="${esc(x.role)}">${esc(x.device_id)} ${x.age_s == null ? "never" : x.age_s + "s"}</span>`).join("");
 }
 
@@ -310,7 +397,7 @@ async function refresh() {
     }
     data = await api("GET", "/api/operator/overview");
     $("#logout").hidden = false;
-    drawHeader(data); drawAssistant(data); drawMap(data); drawInters(data); drawEV(data); drawIncidents(data); await drawTab(data);
+    drawHeader(data); drawScenario(data); drawHazards(data); drawAssistant(data); if (!replaying) drawMap(data); drawInters(data); drawEV(data); drawIncidents(data); await drawTab(data);
   } catch (e) { if (e.message !== "login required") $("#mode").textContent = "backend unreachable"; }
   finally { busy = false; }
 }

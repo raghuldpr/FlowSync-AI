@@ -20,7 +20,9 @@ def public_topology(ctx=Depends(get_ctx)):
         "edges": [{"id": e.id, "src": e.src, "dst": e.dst, "approach": e.id in t.approaches,
                    "movement": t.approaches[e.id].movement if e.id in t.approaches else None}
                   for e in t.edges.values()],
+        "lane_offset": t.vision.get("lane_offset", 14),
         "capacity": t.control.link_capacity,
+        "capacities": {a.id: a.capacity for a in t.approaches.values()},
     }
 
 
@@ -46,10 +48,9 @@ def public_warnings(approach: str = Query(max_length=16), ctx=Depends(get_ctx)):
 @router.get("/api/public/congestion")
 def public_congestion(ctx=Depends(get_ctx)):
     """Coarse bands only; never raw counts, sources or history."""
-    cap = ctx.topology.control.link_capacity
     q = ctx.store.fresh_traffic(ctx.topology.control.stale_after_s)
     out = {}
-    for a in ctx.topology.approaches:
-        c = q.get(a)
+    for a, ap in ctx.topology.approaches.items():
+        cap, c = ap.capacity, q.get(a)
         out[a] = "unknown" if c is None else ("low" if c / cap < 0.34 else "medium" if c / cap < 0.67 else "high")
     return out

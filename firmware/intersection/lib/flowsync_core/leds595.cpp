@@ -1,6 +1,6 @@
 #include "leds595.h"
 
-namespace fsync {
+namespace flowsync {
 
 static uint8_t bits_for(char c, int r, int y, int g) {
   switch (c) {
@@ -24,4 +24,4 @@ void write_chain(Hal595& hal, const uint8_t regs[3]) {
   hal.latch();
 }
 
-}  // namespace fsync
+}  // namespace flowsync

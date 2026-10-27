@@ -1,20 +1,39 @@
 # FlowSync AI
 
-Plan: [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md). Status: Phases 0–6 done (backend core, device API, controller, virtual tabletop, EV tracking, routing, warnings, incidents, dashboards, LLM layer, intersection firmware core). Next: Phase 7 vision; compile/flash `firmware/intersection/src/main.cpp` once the ESP32 toolchain is installed (see [firmware/README.md](firmware/README.md)).
+A connected traffic-intelligence prototype for several intersections: signals that adapt to measured demand within deterministic safety rules,
+incident detection with impact assessment and alternative routes, advance **location-aware** emergency-vehicle warnings that update, redirect or cancel,
+separate public / operator access enforced and logged on the backend, and an LLM that reasons over tools but never controls anything.
 
-Dashboards (served by the backend): `/operator.html` (login), `/public.html?approach=L12` (driver view).
-Timed demo: `python -m simulator.run_sim --demo` (congestion on L13 at 15 s, EV declared at 30 s, breakdown on L21 at 110 s).
+Plan: [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) (plan v2 and its status at the end).
+
+**Status.** Everything below is built and tested in software (see the test count under *Run*): backend + device API, deterministic controller (starvation-safe, spillback / gridlock rules),
+emergency-vehicle green corridor, routing, incidents and impact, road-user (phone) alerts with server-side relevance, road-condition hazards with a verification workflow, the LLM layer,
+viewer / operator / admin roles, audit export, retention, health, metrics, scenario replay, a 12-intersection simulated city, a camera pipeline, and a self-checking demo with four failure drills.
+The ESP32 firmware (`intersection`, `lamptest`, `roadcam`) **compiles for the real targets but has not been flashed or wired**; the vision pipeline is verified on a **synthetic** camera; the LLM only
+against a stand-in model; the measured benefits in [docs/RESULTS.md](docs/RESULTS.md) are **simulated**. What remains is physical: [docs/HARDWARE_RUNBOOK.md](docs/HARDWARE_RUNBOOK.md).
+
+Docs: [demo script](docs/DEMO_SCRIPT.md) · [built vs simulated](docs/BUILT_VS_SIMULATED.md) · [measured results](docs/RESULTS.md) · [hardware spec v2](docs/HARDWARE_SPEC_v2.md) · [software spec v2](docs/SOFTWARE_SPEC_v2.md) ·
+[wiring](docs/HARDWARE_WIRING.md) · [vision setup](docs/VISION_SETUP.md) · [hardware runbook](docs/HARDWARE_RUNBOOK.md) · [pitch outline](docs/PITCH_OUTLINE.md).
+
+Pages (served by the backend):
+`/operator.html` (login; Scenario, Road conditions, Assistant, Replay, Built-vs-simulated) · `/presenter.html` (full-screen narration + live self-checks) ·
+`/driver.html` (**phones**: join as a driver, see only alerts relevant to your route) · `/public.html?approach=L12` (per-approach warning view).
 
 ## Run (Windows PowerShell)
 ```powershell
 python -m venv .venv; .\.venv\Scripts\python -m pip install -r requirements.txt
 $env:PYTHONPATH="backend"
-.\.venv\Scripts\python -m uvicorn app.main:app_factory --factory --port 8000     # backend
-.\.venv\Scripts\python -m simulator.run_sim --heavy E2                          # virtual tabletop (2nd terminal)
-.\.venv\Scripts\python -m pytest -q                                             # tests (180; the firmware ones need `pip install -r requirements-dev.txt`)
+.\.venv\Scripts\python -m uvicorn app.main:app_factory --factory --host 0.0.0.0 --port 8000   # backend (reachable by devices and phones)
+.\.venv\Scripts\python -m simulator.run_sim                                                   # virtual tabletop (2nd terminal)
+.\.venv\Scripts\python -m app.preflight --drill drill_llm_down                                # is it fit to demo? (3rd terminal)
+.\.venv\Scripts\python -m pytest -q                                                            # tests; firmware / vision tests need requirements-dev.txt / requirements-vision.txt, else they skip
 ```
-Operator login: user `operator`, password from `FLOWSYNC_OPERATOR_PASSWORD` (default `operator-dev`, dev only).
-Device keys in `config/devices.yaml` are dev keys; replace them for the real demo.
+Then press **Start** in the Scenario panel (or `python -m simulator.run_sim --demo`). On a physical table the panel shows what a person must do at each step.
+City view: `python -m app.gridgen`, then run the backend and simulator with `FLOWSYNC_TOPOLOGY_PATH=config/topology.grid.yaml` and `FLOWSYNC_DEVICES_PATH=config/devices.grid.yaml`.
+Reproduce the measured results: `python -m simulator.evaluate --seeds 8 --city` (about 20 minutes).
+
+Accounts (development defaults, change them; the health check warns): `viewer` / `operator` / `admin`, passwords from `FLOWSYNC_VIEWER_PASSWORD`, `FLOWSYNC_OPERATOR_PASSWORD`, `FLOWSYNC_ADMIN_PASSWORD`.
+Device keys in `config/devices.yaml` are dev keys; replace them for a real demo.
 
 ## EV flow (Phase 2)
 - Declare: `POST /api/operator/ev` (operator) or `POST /api/device/ev-declare` (car button).
@@ -41,4 +60,6 @@ Without them every question is answered by the deterministic fallback (labelled 
 - EV priority uses the EV's current approach, and the next one past halfway; tune on the real table.
 - Public (anonymous) role has no login; operator is the only account.
 - Rate limiting exists only for login; no public POST endpoints yet.
-- EV positions are scripted in tests; real localisation (ArUco + homography) is Phase 7.
+- EV localisation (ArUco + homography) and ROI counting are verified only on a synthetic camera; see [docs/VISION_SETUP.md](docs/VISION_SETUP.md) before the first real-table run (per-lane capacities: `python -m app.vision.capacity`).
+- On the physical table lane capacities are 2–6 vehicles, so the default congestion rule (75 % full for 10 s) fires at 2 of 3 cars on short lanes; tune `incidents:` in `config/topology.yaml` when you see the real dashboard.
+- Run the camera demo with `python -m simulator.run_sim --demo --vision` against a backend started with `FLOWSYNC_TOPOLOGY_PATH` pointing at the file from `python -m app.vision.capacity --write`.

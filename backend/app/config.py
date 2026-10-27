@@ -31,6 +31,9 @@ class Settings:
     topology_path: str = field(default_factory=lambda: os.getenv("FLOWSYNC_TOPOLOGY_PATH", str(ROOT / "config" / "topology.yaml")))
     devices_path: str = field(default_factory=lambda: os.getenv("FLOWSYNC_DEVICES_PATH", str(ROOT / "config" / "devices.yaml")))
     operator_password: str = field(default_factory=lambda: os.getenv("FLOWSYNC_OPERATOR_PASSWORD", "operator-dev"))
+    viewer_password: str = field(default_factory=lambda: os.getenv("FLOWSYNC_VIEWER_PASSWORD", "viewer-dev"))
+    admin_password: str = field(default_factory=lambda: os.getenv("FLOWSYNC_ADMIN_PASSWORD", "admin-dev"))
+    image_dir: str = field(default_factory=lambda: os.getenv("FLOWSYNC_IMAGE_DIR", str(ROOT / "data" / "images")))
     controller_autostart: bool = True
     session_ttl_s: int = 8 * 3600
     # LLM reasoning layer: any OpenAI-compatible chat-completions endpoint. Off unless fully configured.

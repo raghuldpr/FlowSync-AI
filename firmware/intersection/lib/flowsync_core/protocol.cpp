@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
-namespace fsync {
+namespace flowsync {
 
 const char* const kIntersectionNames[kIntersections] = {"I1", "I2", "I3"};
 
@@ -177,4 +177,4 @@ int build_ack_json(char* buf, size_t cap, int64_t seq, const char* intersection,
   return (w < 0 || (size_t)w >= cap) ? -1 : w;
 }
 
-}  // namespace fsync
+}  // namespace flowsync

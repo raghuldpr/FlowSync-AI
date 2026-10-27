@@ -2,7 +2,7 @@
 #pragma once
 #include "signal_fsm.h"
 
-namespace fsync {
+namespace flowsync {
 // order: min_green_ms, yellow_ms, all_red_ms, max_green_ms, max_red_ms, fallback_green_ms, command_valid_ms, backend_lost_ms
 constexpr Timing kTiming = {5000u, 2000u, 1000u, 20000u, 40000u, 8000u, 4000u, 5000u};
-}  // namespace fsync
+}  // namespace flowsync

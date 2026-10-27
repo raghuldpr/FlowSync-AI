@@ -40,7 +40,7 @@ class ProposalManager:
         if ev_axes and ev_axes != {target}:
             return "conflicts_with_emergency_priority"
         queues = self.store.fresh_traffic(t.control.stale_after_s)
-        score, _, blocked = self.ctrl.axis_score(inter, target, queues)
+        score, _, blocked, _ = self.ctrl.axis_score(inter, target, queues)
         if score is None:
             return "no_fresh_traffic_data"
         if blocked and not score:

@@ -20,7 +20,7 @@
 #include "signing.h"
 #include "timing_defaults.h"
 
-using namespace fsync;
+using namespace flowsync;
 
 struct GpioHal : Hal595 {
   void data(bool level) override { digitalWrite(PIN_595_DATA, level ? HIGH : LOW); }

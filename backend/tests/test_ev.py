@@ -95,7 +95,7 @@ def test_deviation_reroutes_from_actual_position(ev):
 
 def test_stale_location_cancels_warnings_and_priority_then_recovers(ev, ctx, clock):
     ev.position("EV-1", "W1", 0.2)
-    assert ev.priority_approaches() == {"W1"}
+    assert ev.priority_approaches() == {"W1", "L13"}
     clock.t[0] += 4.5
     ev.fresh()
     ev.tick()
@@ -110,11 +110,37 @@ def test_stale_location_cancels_warnings_and_priority_then_recovers(ev, ctx, clo
 
 def test_priority_follows_position(ev):
     ev.position("EV-1", "W1", 0.2)
-    assert ev.priority_approaches() == {"W1"}
+    assert ev.priority_approaches() == {"W1", "L13"}, "the next approach is asked to clear ~3 s before the EV reaches it"
     ev.position("EV-1", "W1", 0.6)
     assert ev.priority_approaches() == {"W1", "L13"}
     ev.position("EV-1", "L13", 0.3)
     assert ev.priority_approaches() == {"L13"}
+
+
+def test_corridor_lead_grows_with_the_queue_in_front_of_the_ev(ev, ctx):
+    ctx.store.set_traffic("L13", 6, "simulated")                 # congestion: the EV is routed via I2
+    ev.fresh(L13=6)
+    ev.tick()
+    s = ev.session
+    ev.position("EV-1", "W1", 0.0)
+    assert s.route == ["W1", "L12", "L23", "O3"]
+    assert ev.priority_approaches() == {"W1", "L12"}              # L23 is 10 s away; empty-queue lead is 9 s
+    ctx.store.set_traffic("L23", 3, "simulated")                  # three vehicles ahead of the EV there: needs 4.2 s more
+    assert ctx.ev.lead_time("L23") == pytest.approx(9 + 1.4 * 3) and "L23" in ev.priority_approaches()
+
+
+def test_evaluation_switches_turn_each_benefit_off(ev, ctx):
+    ev.position("EV-1", "W1", 0.2)
+    ev.priority_enabled = False
+    assert ev.priority_approaches() == set()
+    ev.priority_enabled = True
+    ctx.store.set_traffic("L13", 6, "simulated")
+    ev.reroute_enabled = False
+    ev.fresh(L13=6)
+    ev.tick()
+    assert ev.session.route == ["W1", "L13", "O3"] and ev.session.route_version == 0, "no live rerouting in the baseline"
+    s2 = ev.declare("EV-2", "ext_W", "ext_S", "operator", "t")
+    assert s2.route == ["W1", "L13", "O3"], "baseline route ignores live congestion"
 
 
 def test_arrival_expires_everything(ev, ctx):
@@ -170,5 +196,6 @@ def test_every_transition_is_logged_consistently(ev, ctx):
 def test_driver_text_is_fixed_and_lawful():
     for name, t in TEMPLATES.items():
         low = t.lower()
-        assert "safe and lawful" in low, name
+        if "make way" in low:                      # every instruction to drivers carries the lawful qualifier
+            assert "safe and lawful" in low, name
         assert not any(p in low for p in FORBIDDEN_PHRASES), name

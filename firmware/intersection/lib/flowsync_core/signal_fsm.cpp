@@ -1,6 +1,6 @@
 #include "signal_fsm.h"
 
-namespace fsync {
+namespace flowsync {
 
 static inline char other(char axis) { return axis == 'A' ? 'B' : 'A'; }
 
@@ -67,4 +67,4 @@ DeviceState SignalFsm::state(uint32_t now_ms) const {
   return s;
 }
 
-}  // namespace fsync
+}  // namespace flowsync

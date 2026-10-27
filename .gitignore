@@ -1,6 +1,10 @@
 .env
 firmware/**/include/config.h
 .pio/
+vision_ref.png
+data/
+debug/
+print_markers/
 .venv/
 __pycache__/
 *.db
