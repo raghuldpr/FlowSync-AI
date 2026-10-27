@@ -1,0 +1,12 @@
+# DEV KEYS ONLY. Override the file location with FLOWSYNC_DEVICES_PATH for the real demo.
+devices:
+  intersection-1:
+    key: dev-intersection-1-change-me
+    role: intersection_controller
+    intersections: [I1, I2, I3]
+  camera-1:
+    key: dev-camera-1-change-me
+    role: camera
+  car-1:
+    key: dev-car-1-change-me
+    role: ev_car

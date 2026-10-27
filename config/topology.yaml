@@ -1,0 +1,47 @@
+# Triangle ring tabletop. Shared by controller, router, warnings, simulator (and SUMO later).
+# Approach id == id of the inbound edge it belongs to. Movement A = ring axis, B = external axis.
+timing:                     # all ms, device-side authoritative
+  min_green_ms: 5000
+  yellow_ms: 2000
+  all_red_ms: 1000
+  max_green_ms: 20000
+  max_red_ms: 40000
+  fallback_green_ms: 8000   # fixed-time cycle when backend is lost
+  command_valid_ms: 4000
+  backend_lost_ms: 5000
+control:
+  interval_s: 1.0
+  stale_after_s: 5.0
+  switch_margin: 1.0        # other axis must beat current by this much
+  spillback_occupancy: 0.8  # never feed a link at/above this fraction of capacity
+  link_capacity: 8          # vehicles per ROI (tabletop scale)
+
+intersections: [I1, I2, I3]
+
+# downstream = approach ids (links) this approach discharges into
+approaches:
+  W1:  {intersection: I1, movement: B, downstream: [L12, L13]}
+  L21: {intersection: I1, movement: A, downstream: [L13]}
+  L31: {intersection: I1, movement: A, downstream: [L12]}
+  E2:  {intersection: I2, movement: B, downstream: [L21, L23]}
+  L12: {intersection: I2, movement: A, downstream: [L23]}
+  L32: {intersection: I2, movement: A, downstream: [L21]}
+  S3:  {intersection: I3, movement: B, downstream: [L31, L32]}
+  L13: {intersection: I3, movement: A, downstream: [L32]}
+  L23: {intersection: I3, movement: A, downstream: [L31]}
+
+# Road graph for routing (Phase 2). length in table-cm, speed in cm/s.
+nodes: [ext_W, ext_E, ext_S, I1, I2, I3]
+edges:
+  - {id: W1,  from: ext_W, to: I1,    length: 40, speed: 10}
+  - {id: E2,  from: ext_E, to: I2,    length: 40, speed: 10}
+  - {id: S3,  from: ext_S, to: I3,    length: 40, speed: 10}
+  - {id: O1,  from: I1,    to: ext_W, length: 40, speed: 10}
+  - {id: O2,  from: I2,    to: ext_E, length: 40, speed: 10}
+  - {id: O3,  from: I3,    to: ext_S, length: 40, speed: 10}
+  - {id: L12, from: I1, to: I2, length: 60, speed: 10}
+  - {id: L21, from: I2, to: I1, length: 60, speed: 10}
+  - {id: L13, from: I1, to: I3, length: 50, speed: 10}
+  - {id: L31, from: I3, to: I1, length: 50, speed: 10}
+  - {id: L23, from: I2, to: I3, length: 50, speed: 10}
+  - {id: L32, from: I3, to: I2, length: 50, speed: 10}
