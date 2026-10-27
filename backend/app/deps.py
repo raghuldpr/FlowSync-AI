@@ -9,9 +9,7 @@ from .db import now_iso
 from .security import AuthError
 
 
-async def get_ctx(request: Request):
-    # async on purpose: a sync dependency costs a thread-pool hop on every request, and under the test client
-    # (Python 3.14 + anyio) a lost wake-up on that hop hung long simulation runs
+def get_ctx(request: Request):
     return request.app.state.ctx
 
 

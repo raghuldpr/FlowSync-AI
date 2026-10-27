@@ -17,10 +17,12 @@ import json
 import os
 import statistics
 import time
+import weakref
 from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
+import anyio.from_thread
 from fastapi.testclient import TestClient
 
 import simulator  # noqa: F401
@@ -55,7 +57,12 @@ def build_world(seed: int, rates: dict, city: bool = False) -> World:
     app = create_app(s, clock)
     w = World.__new__(World)
     w.ctx, w.client = app.state.ctx, TestClient(app)
-    topo = Topology.load(s.topology_path)
+    # One event loop for the whole trial. Without this the test client builds a new loop per request, and on Windows each loop
+    # opens a loopback socket pair; ~600 per trial exhaust the ephemeral ports (TIME_WAIT) and later loops block forever in accept().
+    portal_cm = anyio.from_thread.start_blocking_portal()
+    w.client.portal = portal_cm.__enter__()
+    weakref.finalize(w, portal_cm.__exit__, None, None, None)
+    topo =Topology.load(s.topology_path)
     w.sim = VirtualTabletop(w.client, topo, load_yaml(s.devices_path)["devices"],
                             rates={a: rates.get(a, 0.0) for a in topo.approaches}, seed=seed)
     holder["sim"] = w.sim
@@ -177,8 +184,7 @@ def pct(new, base):
 
 
 def run_all(seeds: int, quick: bool, log=print, city: bool = False, workers: int = 1) -> dict:
-    # one trial per worker process: a worker that runs a second world after the first one hangs (leaked TestClient state)
-    with ProcessPoolExecutor(max_workers=max(1, workers), max_tasks_per_child=1) as pool:
+    with ProcessPoolExecutor(max_workers=max(1, workers)) as pool:
         return _run_all(pool, seeds, quick, log, city)
 
 
