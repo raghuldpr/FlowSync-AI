@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FlowSync Driver View</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  body { padding: 16px; max-width: 720px; margin: 0 auto; }
+  .card { text-align: center; padding: 28px 18px; border-radius: 14px; border: 2px solid var(--line); background: var(--panel); margin: 14px 0; }
+  .card.warn { border-color: var(--bad); }
+  .card h2 { font-size: 22px; letter-spacing: 0; text-transform: none; color: var(--ink); margin: 0 0 8px; }
+  .card p { font-size: 19px; margin: 0; }
+  .band { display: inline-block; margin-top: 12px; }
+  .lights { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .lights .panel { text-align: center; }
+  .dot { display: inline-block; width: 16px; height: 16px; border-radius: 50%; margin: 0 5px; vertical-align: -3px; background: var(--stale); }
+  #stamp { font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="row"><h1>Driver view</h1><span style="flex:1"></span>
+  <label class="muted">Approach <select id="approach"></select></label></div>
+<div id="card" class="card" aria-live="assertive"><h2>No emergency vehicle warnings</h2><p class="muted">Drive normally and obey the signals.</p></div>
+<p id="stamp" class="muted"></p>
+<h2>Signals &amp; congestion</h2>
+<div class="lights" id="lights"></div>
+<p class="muted" style="font-size:12px">Information only. Always follow road signs, signals and the instructions of police and emergency services.</p>
+<script src="public.js"></script>
+</body>
+</html>

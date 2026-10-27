@@ -1,5 +1,6 @@
 import json
 import time
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -93,6 +94,123 @@ def devices(_=Depends(require_operator), ctx=Depends(get_ctx)):
     return [{"device_id": d, "role": s["role"],
              "age_s": round(now - ctx.device_seen[d], 1) if d in ctx.device_seen else None}
             for d, s in ctx.device_specs.items()]
+
+
+class EVIn(BaseModel):
+    vehicle_id: str = Field(default="EV-1", max_length=32)
+    origin: str | None = None
+    destination: str | None = None
+
+
+class ClosedIn(BaseModel):
+    closed: bool
+
+
+class IncidentIn(BaseModel):
+    type: Literal["congestion_spike", "stalled_vehicle"]
+    approach: str
+
+
+@router.get("/api/operator/incidents")
+def list_incidents(status: Literal["open", "acknowledged", "resolved", "active"] = None,
+                   limit: int = Query(50, ge=1, le=200), _=Depends(require_operator), ctx=Depends(get_ctx)):
+    return ctx.incidents.list(status, limit)
+
+
+@router.post("/api/operator/incidents")
+def create_incident(body: IncidentIn, sess=Depends(require_operator), ctx=Depends(get_ctx)):
+    """Operator-declared incident (e.g. reported by marshals, or injected for a demo)."""
+    if body.approach not in ctx.topology.approaches:
+        raise HTTPException(422, "unknown approach")
+    iid = ctx.incidents.create(body.type, body.approach, "operator", {"declared_by": sess["username"]})
+    audit(ctx.db, sess["username"], "operator", "incident_create", str(iid), body.model_dump(),
+          "ok" if iid else "duplicate")
+    if iid is None:
+        raise HTTPException(409, "an open incident of this type already exists on that approach")
+    return {"id": iid}
+
+
+@router.post("/api/operator/incidents/{iid}/ack")
+def ack_incident(iid: int, sess=Depends(require_operator), ctx=Depends(get_ctx)):
+    ok = ctx.incidents.acknowledge(iid, sess["username"])
+    audit(ctx.db, sess["username"], "operator", "incident_ack", str(iid), result="ok" if ok else "not_open")
+    if not ok:
+        raise HTTPException(409, "incident is not open")
+    return {"ok": True}
+
+
+@router.post("/api/operator/incidents/{iid}/resolve")
+def resolve_incident(iid: int, sess=Depends(require_operator), ctx=Depends(get_ctx)):
+    ok = ctx.incidents.resolve(iid, sess["username"], "operator_resolved")
+    audit(ctx.db, sess["username"], "operator", "incident_resolve", str(iid), result="ok" if ok else "not_active")
+    if not ok:
+        raise HTTPException(404, "no such active incident")
+    return {"ok": True}
+
+
+@router.get("/api/operator/overview")
+def overview(_=Depends(require_operator), ctx=Depends(get_ctx)):
+    """One call for the operator dashboard."""
+    return {
+        "traffic": traffic(ctx=ctx),
+        "signals": signals(ctx=ctx),
+        "decisions": ctx.store.last_full,
+        "ev": ctx.ev.snapshot(),
+        "incidents": ctx.incidents.list("active"),
+        "alerts_unacknowledged": ctx.incidents.unacknowledged(),
+        "closed_edges": sorted(ctx.store.all_closed()),
+        "operator_closed_edges": sorted(ctx.store.closed_edges),
+        "proposals": ctx.proposals.recent(8),
+        "llm": ctx.llm.status(),
+        "events": ctx.db.query("SELECT * FROM system_events ORDER BY id DESC LIMIT 25"),
+        "warning_events": ctx.db.query(
+            "SELECT e.ts,e.from_state,e.to_state,e.reason,w.approach FROM ev_warning_events e "
+            "JOIN ev_warnings w ON w.id=e.warning_id ORDER BY e.id DESC LIMIT 15"),
+        "devices": devices(ctx=ctx),
+    }
+
+
+@router.post("/api/operator/ev")
+def declare_ev(body: EVIn, sess=Depends(require_operator), ctx=Depends(get_ctx)):
+    o = body.origin or ctx.topology.ev.default_origin
+    d = body.destination or ctx.topology.ev.default_destination
+    if o not in ctx.topology.nodes or d not in ctx.topology.nodes:
+        raise HTTPException(422, "unknown node")
+    try:
+        s = ctx.ev.declare(body.vehicle_id, o, d, "operator", sess["username"])
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    audit(ctx.db, sess["username"], "operator", "ev_declare", str(s.id), {"vehicle_id": body.vehicle_id, "origin": o, "destination": d})
+    return {"session": s.id, "route": s.route}
+
+
+@router.get("/api/operator/ev")
+def list_ev(_=Depends(require_operator), ctx=Depends(get_ctx)):
+    return ctx.ev.snapshot()
+
+
+@router.post("/api/operator/ev/{sid}/clear")
+def clear_ev(sid: int, sess=Depends(require_operator), ctx=Depends(get_ctx)):
+    ok = ctx.ev.end(sid, "operator_cleared")
+    audit(ctx.db, sess["username"], "operator", "ev_clear", str(sid), result="ok" if ok else "not_active")
+    if not ok:
+        raise HTTPException(404, "no active session")
+    return {"ok": True}
+
+
+@router.get("/api/operator/ev/warnings")
+def ev_warning_history(limit: int = Query(100, ge=1, le=500), _=Depends(require_operator), ctx=Depends(get_ctx)):
+    return ctx.db.query("SELECT e.*, w.approach, w.session_id FROM ev_warning_events e "
+                        "JOIN ev_warnings w ON w.id=e.warning_id ORDER BY e.id DESC LIMIT ?", (limit,))
+
+
+@router.post("/api/operator/edges/{edge}/closed")
+def set_edge_closed(edge: str, body: ClosedIn, sess=Depends(require_operator), ctx=Depends(get_ctx)):
+    if edge not in ctx.topology.edges:
+        raise HTTPException(404, "unknown edge")
+    (ctx.store.closed_edges.add if body.closed else ctx.store.closed_edges.discard)(edge)
+    audit(ctx.db, sess["username"], "operator", "edge_closed" if body.closed else "edge_opened", edge)
+    return {"closed": sorted(ctx.store.closed_edges)}
 
 
 @router.post("/api/operator/emergencies")

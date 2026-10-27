@@ -3,7 +3,7 @@ from typing import Dict, Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, ValidationError
 
-from ..audit import event
+from ..audit import audit, event
 from ..db import now_iso
 from ..core.validator import lamps_safe
 from ..deps import DeviceCall, device_call, get_ctx, need_role
@@ -14,6 +14,7 @@ router = APIRouter(prefix="/api/device", tags=["device"])
 class Reading(BaseModel):
     approach: str
     count: int = Field(ge=0, le=64)
+    stationary_s: float = Field(default=0.0, ge=0.0, le=3600.0)   # longest time an object in the ROI has not moved
 
 
 class TrafficIn(BaseModel):
@@ -56,10 +57,46 @@ def post_traffic(call: DeviceCall = Depends(device_call), ctx=Depends(get_ctx)):
         if r.approach not in ctx.topology.approaches:
             raise HTTPException(422, f"unknown approach {r.approach}")
     for r in body.readings:
-        ctx.store.set_traffic(r.approach, r.count, body.source)
+        ctx.store.set_traffic(r.approach, r.count, body.source, r.stationary_s)
         ctx.db.execute("INSERT INTO traffic_snapshots(ts,source,device_id,approach,count) VALUES(?,?,?,?,?)",
                        (now_iso(), body.source, call.device_id, r.approach, r.count))
     return {"ok": True}
+
+
+class EVPositionIn(BaseModel):
+    vehicle_id: str = Field(max_length=32)
+    edge: str
+    progress: float = Field(ge=0.0, le=1.0)
+
+
+class EVDeclareIn(BaseModel):
+    vehicle_id: str = Field(default="EV-1", max_length=32)
+    origin: str | None = None
+    destination: str | None = None
+
+
+@router.post("/ev-position")
+def post_ev_position(call: DeviceCall = Depends(device_call), ctx=Depends(get_ctx)):
+    need_role(call, "camera", "ev_car")
+    body = parse(EVPositionIn, call.data)
+    if body.edge not in ctx.topology.edges:
+        raise HTTPException(422, "unknown edge")
+    return {"tracked": ctx.ev.position(body.vehicle_id, body.edge, body.progress)}
+
+
+@router.post("/ev-declare")
+def post_ev_declare(call: DeviceCall = Depends(device_call), ctx=Depends(get_ctx)):
+    """Emergency button on the connected car: declares emergency mode (still validated by the backend)."""
+    need_role(call, "ev_car")
+    body = parse(EVDeclareIn, call.data)
+    o = body.origin or ctx.topology.ev.default_origin
+    d = body.destination or ctx.topology.ev.default_destination
+    try:
+        s = ctx.ev.declare(body.vehicle_id, o, d, "device_button", call.device_id)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    audit(ctx.db, call.device_id, "device", "ev_declare", str(s.id), body.model_dump())
+    return {"session": s.id, "route": s.route}
 
 
 @router.post("/state")

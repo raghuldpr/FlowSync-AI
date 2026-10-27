@@ -16,6 +16,37 @@ control:
   spillback_occupancy: 0.8  # never feed a link at/above this fraction of capacity
   link_capacity: 8          # vehicles per ROI (tabletop scale)
 
+routing:
+  delay_per_vehicle_s: 3.0     # D_e = this * queued vehicles on the edge's ROI
+  reroute_threshold: 0.15      # new route must be >15% cheaper than the remaining current route
+  min_reroute_interval_s: 5.0
+ev:
+  location_ttl_s: 4.0          # no position for this long -> location stale
+  warn_horizon_s: 20.0         # warn approaches the EV reaches within this time
+  imminent_s: 8.0
+  default_origin: ext_W
+  default_destination: ext_S
+incidents:
+  congestion_occupancy: 0.75     # fraction of link capacity
+  congestion_hold_s: 10          # must persist this long
+  congestion_clear_occupancy: 0.5
+  congestion_clear_hold_s: 5
+  stall_s: 10                    # object stationary this long WHILE its axis has been green
+layout:                          # dashboard map coordinates (viewBox 0 0 800 520)
+  ext_W: [70, 150]
+  ext_E: [730, 150]
+  ext_S: [400, 480]
+  I1: [240, 170]
+  I2: [560, 170]
+  I3: [400, 350]
+node_labels:
+  ext_W: the West
+  ext_E: the East
+  ext_S: the South
+  I1: Intersection 1
+  I2: Intersection 2
+  I3: Intersection 3
+
 intersections: [I1, I2, I3]
 
 # downstream = approach ids (links) this approach discharges into

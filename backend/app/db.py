@@ -32,6 +32,28 @@ CREATE TABLE IF NOT EXISTS emergency_requests (
   id INTEGER PRIMARY KEY AUTOINCREMENT, source TEXT NOT NULL, vehicle_id TEXT NOT NULL,
   approach TEXT NOT NULL, status TEXT NOT NULL, created_by TEXT NOT NULL,
   created_at TEXT NOT NULL, cleared_at TEXT, cleared_by TEXT);
+CREATE TABLE IF NOT EXISTS ev_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, vehicle_id TEXT NOT NULL, origin TEXT NOT NULL, destination TEXT NOT NULL,
+  status TEXT NOT NULL, declared_by TEXT NOT NULL, source TEXT NOT NULL, created_at TEXT NOT NULL,
+  ended_at TEXT, end_reason TEXT);
+CREATE TABLE IF NOT EXISTS ev_positions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER NOT NULL, ts TEXT NOT NULL, edge TEXT NOT NULL,
+  progress REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS ev_warnings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER NOT NULL, approach TEXT NOT NULL, state TEXT NOT NULL,
+  eta_band TEXT NOT NULL, text TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, ended_at TEXT);
+CREATE TABLE IF NOT EXISTS ev_warning_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, warning_id INTEGER NOT NULL, ts TEXT NOT NULL,
+  from_state TEXT, to_state TEXT NOT NULL, reason TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS incidents (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, approach TEXT NOT NULL, status TEXT NOT NULL,
+  severity TEXT NOT NULL, source TEXT NOT NULL, detected_at TEXT NOT NULL, details TEXT,
+  ack_by TEXT, ack_at TEXT, resolved_by TEXT, resolved_at TEXT, resolve_reason TEXT);
+CREATE TABLE IF NOT EXISTS llm_proposals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, created_clock REAL NOT NULL,
+  created_by TEXT NOT NULL, via TEXT NOT NULL, intersection TEXT NOT NULL, target TEXT NOT NULL,
+  duration_s INTEGER NOT NULL, rationale TEXT, status TEXT NOT NULL, validator_reason TEXT NOT NULL,
+  decided_by TEXT, decided_at TEXT);
 CREATE TABLE IF NOT EXISTS system_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, type TEXT NOT NULL, source TEXT NOT NULL,
   severity TEXT NOT NULL, payload TEXT);

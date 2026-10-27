@@ -41,6 +41,8 @@ class VirtualTabletop:
         self.fsms = {i: SignalFSM(topology.timing, 0) for i in topology.intersections}
         self.dev = DeviceClient(client, "intersection-1", devices["intersection-1"]["key"])
         self.cam = DeviceClient(client, "camera-1", devices["camera-1"]["key"])
+        self.stalled = set()                 # approaches with a broken-down vehicle (no departures)
+        self.last_move_ms = {a: 0 for a in topology.approaches}
         self.link_up = True
         self.last_ok_ms = 0
         self.unsafe_seen = False
@@ -51,7 +53,10 @@ class VirtualTabletop:
         for a, ap in self.topo.approaches.items():
             if self.rng.random() < self.rates[a] * dt_s and self.queues[a] < cap:
                 self.queues[a] += 1
-            if self.fsms[ap.intersection].lamps()[ap.movement] == "G" and self.queues[a] > 0:
+            if self.queues[a] == 0:
+                self.last_move_ms[a] = self.now_ms
+            if (self.fsms[ap.intersection].lamps()[ap.movement] == "G" and self.queues[a] > 0
+                    and a not in self.stalled):
                 self._frac[a] += self.DEPART_RATE * dt_s
                 while self._frac[a] >= 1 and self.queues[a] > 0:
                     self._frac[a] -= 1
@@ -61,6 +66,7 @@ class VirtualTabletop:
                         self._frac[a] = 0.0       # blocked by a full downstream link
                         break
                     self.queues[a] -= 1
+                    self.last_move_ms[a] = self.now_ms
                     if dest:
                         self.queues[dest] += 1
 
@@ -84,7 +90,9 @@ class VirtualTabletop:
     def _communicate(self):
         r = self.cam.request("POST", "/api/device/traffic", {
             "source": "simulated",
-            "readings": [{"approach": a, "count": q} for a, q in self.queues.items()]})
+            "readings": [{"approach": a, "count": q,
+                          "stationary_s": round((self.now_ms - self.last_move_ms[a]) / 1000, 1) if q else 0.0}
+                         for a, q in self.queues.items()]})
         if r.status_code != 200:
             return
         self.dev.request("POST", "/api/device/state", {"intersections": {

@@ -13,10 +13,23 @@ class Store:
         self.commands = {}                      # device_id -> {intersection -> cmd}
         self.last_decision = {}                 # intersection -> (target, reason)
         self._seq = {}                          # device_id -> last issued seq
+        self.closed_edges = set()               # routing closures set by operators
+        self.incident_closed = set()            # closures caused by open incidents (e.g. stalled vehicle)
+        self.last_full = {}                     # intersection -> latest controller decision incl. inputs
 
-    def set_traffic(self, approach: str, count: int, source: str):
+    def set_traffic(self, approach: str, count: int, source: str, stationary_s: float = 0.0):
         with self._lock:
-            self.traffic[approach] = {"count": count, "recv_t": self.clock(), "source": source}
+            self.traffic[approach] = {"count": count, "recv_t": self.clock(), "source": source,
+                                      "stationary_s": stationary_s}
+
+    def fresh_record(self, approach: str, stale_after_s: float):
+        with self._lock:
+            r = self.traffic.get(approach)
+        return r if r and self.clock() - r["recv_t"] <= stale_after_s else None
+
+    def all_closed(self) -> set:
+        with self._lock:
+            return set(self.closed_edges) | set(self.incident_closed)
 
     def fresh_traffic(self, stale_after_s: float) -> dict:
         """approach -> count, or None when stale/missing (never a fresh zero)."""

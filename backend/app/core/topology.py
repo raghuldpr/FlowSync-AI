@@ -25,6 +25,31 @@ class ControlParams:
 
 
 @dataclass(frozen=True)
+class RoutingParams:
+    delay_per_vehicle_s: float
+    reroute_threshold: float
+    min_reroute_interval_s: float
+
+
+@dataclass(frozen=True)
+class EVParams:
+    location_ttl_s: float
+    warn_horizon_s: float
+    imminent_s: float
+    default_origin: str
+    default_destination: str
+
+
+@dataclass(frozen=True)
+class IncidentParams:
+    congestion_occupancy: float
+    congestion_hold_s: float
+    congestion_clear_occupancy: float
+    congestion_clear_hold_s: float
+    stall_s: float
+
+
+@dataclass(frozen=True)
 class Approach:
     id: str
     intersection: str
@@ -45,6 +70,11 @@ class Topology:
     def __init__(self, raw: dict):
         self.timing = Timing(**raw["timing"])
         self.control = ControlParams(**raw["control"])
+        self.routing = RoutingParams(**raw["routing"])
+        self.ev = EVParams(**raw["ev"])
+        self.incidents = IncidentParams(**raw["incidents"])
+        self.layout = {k: list(v) for k, v in raw.get("layout", {}).items()}
+        self.node_labels = dict(raw.get("node_labels", {}))
         self.intersections = list(raw["intersections"])
         self.approaches = {
             aid: Approach(aid, a["intersection"], a["movement"], tuple(a.get("downstream", [])))
