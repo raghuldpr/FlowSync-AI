@@ -67,6 +67,12 @@ Open `http://localhost:8000/operator.html`, log in as `operator` (default passwo
 
 On Linux or macOS use `source .venv/bin/activate`, `export PYTHONPATH=backend:.` and the same commands.
 
+Before a phone-hotspot demo, print the join links and a QR sheet for the laptop's current address (needs `pip install -r requirements-demo.txt`):
+
+```powershell
+.\.venv\Scripts\python -m app.joinqr      # writes data/qr/join.html
+```
+
 ### Pages (served by the backend)
 
 | Page | For |
@@ -136,7 +142,7 @@ docs/             plans, specs, runbooks, demo script, results
 
 ## Documentation
 
-[Demo script](docs/DEMO_SCRIPT.md) · [Built vs simulated](docs/BUILT_VS_SIMULATED.md) · [Measured results](docs/RESULTS.md) · [Implementation plan](docs/IMPLEMENTATION_PLAN.md) · [Hardware spec v2](docs/HARDWARE_SPEC_v2.md) · [Software spec v2](docs/SOFTWARE_SPEC_v2.md) · [Wiring](docs/HARDWARE_WIRING.md) · [Vision setup](docs/VISION_SETUP.md) · [Hardware runbook](docs/HARDWARE_RUNBOOK.md) · [Frontend spec](docs/FRONTEND_SPEC.md)
+[Demo script](docs/DEMO_SCRIPT.md) · [Built vs simulated](docs/BUILT_VS_SIMULATED.md) · [Measured results](docs/RESULTS.md) · [Implementation plan](docs/IMPLEMENTATION_PLAN.md) · [Hardware spec v2](docs/HARDWARE_SPEC_v2.md) · [Software spec v2](docs/SOFTWARE_SPEC_v2.md) · [Wiring](docs/HARDWARE_WIRING.md) · [Vision setup](docs/VISION_SETUP.md) · [Hardware runbook](docs/HARDWARE_RUNBOOK.md) · [Car wiring](docs/HARDWARE_CAR_WIRING.md) · [Frontend spec](docs/FRONTEND_SPEC.md) · [Pitch outline](docs/PITCH_OUTLINE.md) · [Wow-factor tracker](docs/WOW_FACTORS.md) · [LLM setup](docs/LLM_SETUP.md)
 
 ## Building the firmware
 
