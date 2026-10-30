@@ -22,11 +22,13 @@ Every software path runs against a simulator, so the whole system can be demonst
 | Backend, controller, EV corridor, routing, incidents, road-user alerts, hazards, roles, audit, retention, health, metrics, replay | built and covered by automated tests |
 | Guest join with roles (vehicle / ambulance), guest ambulance trip, **simulated** V2V emergency alert, trip receipt | built and tested ([docs/GUEST_API.md](docs/GUEST_API.md)); V2V is simulated in the backend, no radio is involved |
 | Operator / presenter / phone dashboards (`dashboard/`) | built, served by the backend |
-| 3D big-screen dashboard (`web/`) | built; showing the guests' cars on its map is in progress (see [docs/WOW_FACTORS.md](docs/WOW_FACTORS.md)) |
+| 3D big-screen dashboard (`web/`) | built: the guests' cars, who was warned and who was not, and a **simulated** V2V banner; checked with the rehearsal bots, not on a projector or real phones |
+| Operator extras | hash-chained audit log with a **Verify chain** button, and a visible trace of each assistant query ([docs/OPERATOR_WOW.md](docs/OPERATOR_WOW.md)); a **simulated** hand-off of verified hazards to a road authority and a camera-frames panel (nothing leaves the system) |
+| Demo operations | `scripts/start_demo.ps1` / `stop_demo.ps1`, `python -m app.setup_demo` (private passwords and device keys into git-ignored files), `python -m app.preflight --demo`, rehearsal bots ([docs/DEMO_DAY.md](docs/DEMO_DAY.md), [docs/REHEARSAL.md](docs/REHEARSAL.md)) |
 | SUMO evidence view (`sumosim/`) | built; separate from the live phone demo; results are **simulated** ([docs/RESULTS_SUMO.md](docs/RESULTS_SUMO.md)) |
 | Standalone hardware firmware (`firmware/table`, `firmware/car`, `firmware/camtest`) | compiles and its logic passes host tests; **not yet flashed or bench-tested on a board** |
 | Backend-connected intersection firmware (`firmware/intersection`, 74HCT595 design) and `roadcam` | kept as future work; compiles and passes host tests against Python golden traces; **not flashed or wired** |
-| Pothole detection | pretrained model (see [docs/POTHOLE_MODEL.md](docs/POTHOLE_MODEL.md)); **the weights are not downloaded or pinned yet**, so the old dark-patch heuristic runs until they are; not measured on our camera |
+| Pothole detection | pretrained model, download and SHA-256 pinned by `python -m app.vision.fetch_model` (weights stay git-ignored; see [docs/POTHOLE_MODEL.md](docs/POTHOLE_MODEL.md)); the old dark-patch heuristic is the labelled fallback; **not measured on our camera**; every detection needs operator verification |
 | Camera vision (ROI counting, ArUco EV tracking) | verified on a **synthetic** camera only; not part of the table demo |
 | LLM layer | tested against a stand-in model; deterministic fallback is always available |
 | Measured benefits ([docs/RESULTS.md](docs/RESULTS.md), [docs/RESULTS_SUMO.md](docs/RESULTS_SUMO.md)) | **simulated**: outcomes of our own traffic and driver models, not predictions for a real road |
@@ -51,6 +53,17 @@ Where the system does **not** show a benefit in our model, and we say so: rerout
 ### SUMO view (simulated, 5 seeds)
 
 SUMO's driver model supplies the vehicles; our real controller sets the lights ([docs/RESULTS_SUMO.md](docs/RESULTS_SUMO.md)). Mean waiting time per vehicle is about halved against fixed-time signals: 3.6 s vs 7.7 s under balanced demand, and 4.1 s vs 7.8 s under a rush from the West. The ambulance with FlowSync never stops (0 s vs 8 s stopped for the baseline), but its **trip is not shorter**: 71.2 ± 7.0 s vs 69.4 ± 1.3 s, because the baseline overtakes the jam in the second lane and FlowSync takes a longer detour.
+
+## One-command demo (Windows PowerShell)
+
+```powershell
+python -m app.setup_demo                      # once: private passwords and device keys, written only to git-ignored files
+.\scripts\start_demo.ps1 -Web -Bots           # backend + virtual tabletop + join QR sheet + big screen + looping rehearsal bots (simulated guests)
+python -m app.preflight --demo                # must end READY; warns about default credentials, hotspot address, optional parts
+.\scripts\stop_demo.ps1
+```
+
+The hardware prototypes are separate and need none of this. The checklist for the day is [docs/DEMO_DAY.md](docs/DEMO_DAY.md); rehearsing without phones is [docs/REHEARSAL.md](docs/REHEARSAL.md).
 
 ## Quick start (Windows PowerShell)
 
@@ -152,7 +165,10 @@ backend/tests/    automated tests
 config/           topology.yaml, devices.yaml (+ generated city grid files)
 dashboard/        operator, presenter, phone driver, public and overview pages
 web/              3D big-screen dashboard (React, Vite, React Three Fiber)
-simulator/        virtual tabletop (run_sim.py, tabletop.py), vision_world.py, evaluate.py (A/B experiments)
+scripts/          start_demo.ps1, stop_demo.ps1
+tools/            pothole test-image and video senders (a SIMULATED camera feed)
+testdata/         pothole test images and clip
+simulator/        guest_bots.py (rehearsal), virtual tabletop (run_sim.py, tabletop.py), vision_world.py, evaluate.py (A/B experiments)
 sumosim/          SUMO road-traffic view: network from topology.yaml, bridge to the backend, comparison
 firmware/         table (standalone 2-ESP32 demo), car (standalone car brain), camtest (standalone ESP32-CAM),
                   intersection (backend-connected controller, future work), roadcam, timing-header generator
@@ -161,7 +177,7 @@ docs/             plans, specs, runbooks, demo script, results
 
 ## Documentation
 
-[Demo script](docs/DEMO_SCRIPT.md) · [Built vs simulated](docs/BUILT_VS_SIMULATED.md) · [Measured results](docs/RESULTS.md) · [Implementation plan](docs/IMPLEMENTATION_PLAN.md) · [Hardware spec v2](docs/HARDWARE_SPEC_v2.md) · [Software spec v2](docs/SOFTWARE_SPEC_v2.md) · [Wiring](docs/HARDWARE_WIRING.md) · [Vision setup](docs/VISION_SETUP.md) · [Hardware runbook](docs/HARDWARE_RUNBOOK.md) · [Car wiring](docs/HARDWARE_CAR_WIRING.md) · [Frontend spec](docs/FRONTEND_SPEC.md) · [Pitch outline](docs/PITCH_OUTLINE.md) · [Wow-factor tracker](docs/WOW_FACTORS.md) · [LLM setup](docs/LLM_SETUP.md) · [Network setup](docs/NETWORK_SETUP.md) · [Guest, ambulance and V2V API](docs/GUEST_API.md) · [V2V message mapping](docs/V2V_MESSAGES.md) · [Pothole model](docs/POTHOLE_MODEL.md) · [SUMO](docs/SUMO.md) · [SUMO results](docs/RESULTS_SUMO.md)
+[Demo script](docs/DEMO_SCRIPT.md) · [Built vs simulated](docs/BUILT_VS_SIMULATED.md) · [Measured results](docs/RESULTS.md) · [Implementation plan](docs/IMPLEMENTATION_PLAN.md) · [Hardware spec v2](docs/HARDWARE_SPEC_v2.md) · [Software spec v2](docs/SOFTWARE_SPEC_v2.md) · [Wiring](docs/HARDWARE_WIRING.md) · [Vision setup](docs/VISION_SETUP.md) · [Hardware runbook](docs/HARDWARE_RUNBOOK.md) · [Car wiring](docs/HARDWARE_CAR_WIRING.md) · [Frontend spec](docs/FRONTEND_SPEC.md) · [Pitch outline](docs/PITCH_OUTLINE.md) · [Wow-factor tracker](docs/WOW_FACTORS.md) · [LLM setup](docs/LLM_SETUP.md) · [Network setup](docs/NETWORK_SETUP.md) · [Guest, ambulance and V2V API](docs/GUEST_API.md) · [V2V message mapping](docs/V2V_MESSAGES.md) · [Pothole model](docs/POTHOLE_MODEL.md) · [SUMO](docs/SUMO.md) · [SUMO results](docs/RESULTS_SUMO.md) · [Demo-day checklist](docs/DEMO_DAY.md) · [Rehearsal with bots](docs/REHEARSAL.md) · [Operator extras](docs/OPERATOR_WOW.md)
 
 ## Building the firmware
 
@@ -177,7 +193,7 @@ The backend-connected intersection controller (`firmware/intersection`, `esp32de
 
 ## Known limitations
 
-- No firmware has run on a board yet (all of it compiles; the table, car and camera logic has host tests). The pothole model is untested on our camera, and its weights are not yet downloaded or hash-pinned.
+- No firmware has run on a board yet (all of it compiles; the table, car and camera logic has host tests). The pothole model is untested on our camera (its download is hash-pinned).
 - V2V is simulated in the backend (no radio). Judges' phones drive a **virtual** car (dead reckoning, no GPS).
 - The Windows Mobile Hotspot is believed to allow about 8 clients; the real limit has not been measured (see [docs/NETWORK_SETUP.md](docs/NETWORK_SETUP.md)).
 - On the physical table lane capacities are 2-6 vehicles, so the default congestion rule (75 % full for 10 s) can fire at 2 of 3 cars on short lanes; tune `incidents:` in `config/topology.yaml`.
