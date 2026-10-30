@@ -148,3 +148,7 @@ Per the official free-tier page (confirm in your console): the free allowance fo
 - The new settings, the proxy handling, the join limits, `/api/whoami`, empty-folder startup and the QR links have automated tests (`backend/tests/test_hosting.py`).
 - The build produces a 20.8 MB folder with Linux wheels (for example `pydantic_core` for CPython 3.12, x86-64 Linux). The app code, run from that folder's layout on a Windows PC, started, served `/driver.html`, accepted a guest join, and gave the right client address with a simulated `X-Forwarded-For`.
 - **Not verified:** anything on Catalyst itself: the deploy, the startup command with `sh -c`, `/tmp` being writable, the proxy hop count, instance behaviour when idle, the background loop running between requests, and the Linux packages loading on the host.
+
+## The 3D big screen on the hosted copy
+
+`deploy\catalyst\build.ps1` also builds `web\` (needs Node.js; skip with `-NoWeb`) for the sub-path `/screen/` and ships only the build. The backend serves it at **`https://YOUR-SERVICE.../screen/`**; the old pages stay at `/presenter.html`, `/operator.html` and `/driver.html`. Sign in on the 3D screen as `operator` with the operator password from your `.env`. It talks to the hosted `/api` on the same address, so nothing else needs configuring. Locally, `npm run dev` in `web\` is unchanged (set `FLOWSYNC_API` only to point it at the hosted copy).

@@ -19,6 +19,7 @@
 param(
   [switch]$AllowDevKeys,
   [switch]$NoDeps,                 # skip the Linux packages (only for a local layout check)
+  [switch]$NoWeb,                  # skip building the 3D big screen (web\) into the upload; the old pages stay
   [string]$PythonVersion = "3.12"  # must match the managed Python runtime you pick in Catalyst (3.10 to 3.13 are listed)
 )
 $ErrorActionPreference = 'Stop'
@@ -59,6 +60,27 @@ New-Item -ItemType Directory -Force (Join-Path $Out 'config') | Out-Null
 Copy-Item (Join-Path $Root 'config\topology.yaml') (Join-Path $Out 'config\topology.yaml')
 Copy-Item $devices (Join-Path $Out 'config\devices.yaml')
 Copy-Item (Join-Path $Root 'dashboard') (Join-Path $Out 'dashboard') -Recurse -Force
+
+# The 3D big screen: build web\ for the sub-path /screen/ (the backend serves it from web\dist) and ship only the build.
+if (-not $NoWeb) {
+  $web = Join-Path $Root 'web'
+  if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { throw "npm (Node.js) is needed to build the 3D screen. Install Node.js or run with -NoWeb." }
+  Push-Location $web
+  try {
+    $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    if (-not (Test-Path (Join-Path $web 'node_modules'))) { npm ci --silent 2>&1 | Out-Null; if ($LASTEXITCODE -ne 0) { throw "npm ci failed in web\" } }
+    $env:FLOWSYNC_BASE = '/screen/'
+    npm run build 2>&1 | ForEach-Object { Write-Host ("  web: " + $_) }
+    $webExit = $LASTEXITCODE
+    Remove-Item Env:FLOWSYNC_BASE -ErrorAction SilentlyContinue
+    $ErrorActionPreference = $prev
+    if ($webExit -ne 0) { throw "npm run build failed in web\" }
+  } finally { Pop-Location }
+  New-Item -ItemType Directory -Force (Join-Path $Out 'web') | Out-Null
+  Copy-Item (Join-Path $web 'dist') (Join-Path $Out 'web\dist') -Recurse -Force
+  # The local build above used the /screen/ base; remove it so a plain `npm run dev` / local preview is not affected.
+  Remove-Item (Join-Path $web 'dist') -Recurse -Force
+}
 
 $mb = [math]::Round(((Get-ChildItem $Out -Recurse -File | Measure-Object Length -Sum).Sum) / 1MB, 1)
 Write-Host "Built $Out ($mb MB). Next: see docs\CATALYST.md (catalyst init / deploy)."

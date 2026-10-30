@@ -163,3 +163,25 @@ def test_running_on_catalyst_refuses_development_credentials_even_without_a_publ
     with pytest.raises(RuntimeError) as e:
         make(tmp_path, clock, viewer_password="viewer-dev", devices_path=_devices_file(tmp_path))
     assert "Catalyst" in str(e.value) and "viewer-dev" not in str(e.value)
+
+
+# ---- the 3D big screen is served at /screen/ when it has been built ---------------------------------------
+def test_screen_build_is_served_at_screen_and_does_not_swallow_the_old_pages(tmp_path, clock, monkeypatch):
+    from app import main as main_mod
+    (tmp_path / "web" / "dist").mkdir(parents=True)
+    (tmp_path / "web" / "dist" / "index.html").write_text("<title>BIGSCREEN</title>", encoding="utf-8")
+    (tmp_path / "dashboard").mkdir()
+    (tmp_path / "dashboard" / "index.html").write_text("<title>OLDPAGES</title>", encoding="utf-8")
+    monkeypatch.setattr(main_mod, "ROOT", tmp_path)
+    c = TestClient(make(tmp_path, clock))
+    assert "BIGSCREEN" in c.get("/screen/").text and "OLDPAGES" in c.get("/").text
+    assert c.get("/api/health").status_code == 200
+
+
+def test_without_a_screen_build_only_the_old_pages_are_served(tmp_path, clock, monkeypatch):
+    from app import main as main_mod
+    (tmp_path / "dashboard").mkdir()
+    (tmp_path / "dashboard" / "index.html").write_text("<title>OLDPAGES</title>", encoding="utf-8")
+    monkeypatch.setattr(main_mod, "ROOT", tmp_path)
+    c = TestClient(make(tmp_path, clock))
+    assert c.get("/screen/").status_code == 404 and "OLDPAGES" in c.get("/").text

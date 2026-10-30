@@ -147,6 +147,9 @@ def create_app(settings: Optional[Settings] = None, clock: Optional[Callable[[],
     app.include_router(hazards_api.router)
     app.include_router(admin_api.router)
     dash = Path(ROOT) / "dashboard"
+    screen = Path(ROOT) / "web" / "dist"      # the 3D big screen, built with base /screen/ (deploy/catalyst/build.ps1 or `npm run build`)
+    if screen.exists():
+        app.mount("/screen", StaticFiles(directory=str(screen), html=True), name="screen")      # before "/", which would swallow it
     if dash.exists():
         app.mount("/", StaticFiles(directory=str(dash), html=True), name="dashboard")
     return app
