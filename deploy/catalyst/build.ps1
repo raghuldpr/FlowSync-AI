@@ -39,9 +39,15 @@ Get-ChildItem $Out -Force | Where-Object { $_.Name -ne 'app-config.json' } | Rem
 
 if (-not $NoDeps) {
   $abi = 'cp' + $PythonVersion.Replace('.', '')
+  # pip writes warnings (for example about packages already installed on this PC) to stderr; Windows PowerShell 5.1 would turn
+  # that into a terminating error under 'Stop', so judge success by pip's exit code only.
+  $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
   python -m pip install --quiet --target $Out --platform manylinux2014_x86_64 --only-binary=:all: `
-    --python-version $PythonVersion --implementation cp --abi $abi -r (Join-Path $PSScriptRoot 'requirements.txt')
-  if ($LASTEXITCODE -ne 0) { throw "pip could not download Linux packages for Python $PythonVersion" }
+    --python-version $PythonVersion --implementation cp --abi $abi -r (Join-Path $PSScriptRoot 'requirements.txt') 2>&1 |
+    ForEach-Object { if ($_ -is [System.Management.Automation.ErrorRecord]) { Write-Host ("  pip: " + $_.Exception.Message) } else { Write-Host ("  pip: " + $_) } }
+  $pipExit = $LASTEXITCODE
+  $ErrorActionPreference = $prev
+  if ($pipExit -ne 0) { throw "pip could not download Linux packages for Python $PythonVersion" }
 }
 
 $app = Join-Path $Out 'backend\app'
