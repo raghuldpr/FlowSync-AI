@@ -41,6 +41,8 @@ class Context:
     def __init__(self, settings: Settings, clock: Optional[Callable[[], float]] = None):
         self.settings = settings
         self.instance_id = secrets.token_hex(4)      # new on every process start: two different values = two instances
+        if settings.db_path != ":memory:":
+            Path(settings.db_path).parent.mkdir(parents=True, exist_ok=True)     # a hosted app starts from an empty writable folder
         self.db = Database(settings.db_path)
         self.topology = Topology.load(settings.topology_path)
         self.device_specs = load_yaml(settings.devices_path)["devices"]

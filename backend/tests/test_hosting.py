@@ -50,6 +50,14 @@ def test_env_overrides_and_bad_values_fall_back(monkeypatch):
     assert Settings().trust_proxy_hops == 0
 
 
+def test_starts_from_a_data_dir_that_does_not_exist_yet(tmp_path, clock):
+    fresh = tmp_path / "not" / "there" / "yet"
+    s = Settings(db_path=str(fresh / "flowsync.db"), image_dir=str(fresh / "images"), operator_password=PW, controller_autostart=False,
+                 llm_enabled=False, llm_base_url="", llm_model="", llm_api_key="")
+    c = TestClient(create_app(s, clock))
+    assert c.get("/api/health").json() == {"status": "ok"} and (fresh / "flowsync.db").exists()
+
+
 # ---- the client address behind a proxy ----------------------------------------------------------------
 def test_without_trust_the_forwarded_header_is_ignored(tmp_path, clock):
     c = TestClient(make(tmp_path, clock))
