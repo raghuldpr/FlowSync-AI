@@ -8,11 +8,11 @@ Rules that every item must keep: warnings use fixed lawful templates (the LLM ne
 
 | # | Item | Status | Notes |
 |---|---|---|---|
-| H1 | Commit all work; README links resolve | doing | |
+| H1 | Commit all work; README links resolve | doing | Feature branches merged locally; nothing pushed |
 | H2 | Bench-test every sensor on a breadboard (before the hackathon day) | todo | See `docs/HARDWARE_CAR_WIRING.md`, `firmware/car`, `firmware/camtest`, `lamptest` |
-| H3 | Test hotspot: laptop reachable from a second phone and an ESP32 (client isolation) | todo | `python -m app.joinqr` prints the address |
+| H3 | Test hotspot: laptop reachable from a second phone and an ESP32; count devices | todo | `docs/NETWORK_SETUP.md`; `python -m app.joinqr` prints the address |
 | H4 | Test the real LLM provider (Groq first) | todo | See `docs/LLM_SETUP.md` |
-| H5 | Physical table, camera calibration, ambulance marker | todo | On the day; see `docs/HARDWARE_RUNBOOK.md` |
+| H5 | Build the standalone table (2 ESP32 + 6 modules), car brain and ESP32-CAM; flash and bench-test each | todo | No camera calibration or ambulance marker any more; see `docs/HARDWARE_RUNBOOK.md` |
 | H6 | Freeze features 2 hours before judging; rehearse with 6+ phones | todo | |
 
 ## Wow factors, in build order
@@ -31,18 +31,18 @@ Rules that every item must keep: warnings use fixed lawful templates (the LLM ne
 | 10 | **Speed advice to arrive on green** (never above the limit, never "hurry for the amber") | Medium | Medium to high | todo | |
 | 11 | **Early congestion alert** with an alternative route | Medium | Medium to high | todo | |
 | 12 | **City pulse** on the big screen: flow particles, green-wave ribbon | Easy to medium | Medium | todo | |
-| 13 | **Judge roles**: one drives the ambulance (dispatch QR), one is the operator, one reports a hazard photo | Medium | High | todo | Pick one or two |
+| 13 | **Judge roles**: one drives the ambulance (dispatch QR), one is the operator, one reports a hazard photo | Medium | High | partly done: guests pick **vehicle** or **ambulance**; operator and hazard-photo roles are not built | Pick one or two |
 | 14 | **Two emergency vehicles** with a deterministic priority rule (class, then ETA) | Medium to hard | Medium to high | todo, only if the above is solid | |
-| 15 | **Physical sync**: table buzzer/LED fires with the phones | Medium | High | todo, needs hardware | |
+| 15 | **Physical sync**: table buzzer/LED fires with the phones | Medium | High | cut: the hardware prototypes are standalone and not connected to the software | |
 | 16 | Speech-to-text for the operator question | Easy | Medium | todo | |
 | 17 | Pre-translated warnings, vibration patterns (not on iPhone) | Easy | Low to medium | todo | |
-| 18 | Mapping of our messages to SAE J2735 types (slide or doc, not code) | Easy | Low to medium | todo | |
+| 18 | Mapping of our messages to SAE J2735 types (slide or doc, not code) | Easy | Low to medium | done (`docs/V2V_MESSAGES.md`) | |
 
 ## Cut on purpose
 
 | Item | Why |
 |---|---|
-| V2V with ESP-NOW, RSU on the ESP8266, crash detection chain | Needs three more firmwares and untested backend work; a half-working chain looks worse than none. Present it as future work. The car firmware stays as a sensor and Wi-Fi client. |
+| V2V with ESP-NOW, RSU on the ESP8266, crash detection chain | Needs three more firmwares and untested backend work; a half-working chain looks worse than none. Present it as future work. V2V is shown by the **simulated** broadcast in the backend (`docs/V2V_MESSAGES.md`); the car firmware is a standalone sensor and alert unit with no Wi-Fi. |
 
 ## Demo-day gotchas
 

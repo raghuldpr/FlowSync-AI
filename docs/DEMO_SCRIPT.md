@@ -10,14 +10,15 @@ python -m app.preflight --url http://LAPTOP_IP:8000 --drill drill_llm_down
 ```
 It must end with `READY` (WARN lines — dev passwords, no LLM key — are reminders, not failures). It also prints the laptop's LAN address: put it in the firmware
 `config.h` files and give phones `http://LAPTOP_IP:8000/driver.html`. Then: operator dashboard on the laptop, **presenter view on the second screen**, one phone joined as a driver.
-Physical table only: reference photo captured with an empty table, corner markers visible, exposure locked, the car's roof marker facing forward (`docs/HARDWARE_RUNBOOK.md`).
+Network: follow `docs/NETWORK_SETUP.md` (Windows hotspot on 2.4 GHz, firewall rule for port 8000), then run `python -m app.joinqr` to print the join links and write the printable QR sheet (`data/qr/join.html`). Windows Mobile Hotspot is believed to allow about 8 clients: count devices; bring a router as a backup.
+The hardware prototypes (table, car, camera) are standalone and run separately from this script: see `docs/HARDWARE_RUNBOOK.md`.
 
 ## Run modes
 | Mode | Start | World |
 |---|---|---|
 | Fully simulated (laptop only) | backend + `python -m simulator.run_sim` → Scenario panel → *Start* | the simulator obeys the scenario's world commands |
 | Simulated + synthetic camera | `python -m simulator.run_sim --vision` (backend on the physical topology) | queues and EV are rendered, then **measured** by the real vision pipeline |
-| Physical table | backend + `python -m app.vision.run …` + flashed controller | nobody polls the simulator channel → the panel shows **▶ On the table:** cues; a person performs them |
+| Backend-connected physical table (future work) | backend + a flashed `firmware/intersection` controller (the old one-ESP32 design) | nobody polls the simulator channel → the panel shows **▶ On the table:** cues; a person performs them. Not part of the current hardware demo, whose table is standalone |
 | City view (12 intersections, simulated) | backend + simulator with `FLOWSYNC_TOPOLOGY_PATH=config/topology.grid.yaml` (+ devices.grid.yaml) → scenario `city_demo` | generated grid, same controller code |
 
 The same script drives all modes. In physical mode, checks tied to a cue only pass if the cue is performed.
@@ -38,6 +39,14 @@ The same script drives all modes. In physical mode, checks tied to a cue only pa
 
 After the run the presenter screen shows tiles (ambulance trip time, reroutes, priority decisions, incidents, road users warned / not warned).
 The trip time in the tiles is a measurement of one scripted run, **not** a benefit claim; benefits come from the paired comparisons in `docs/RESULTS.md`.
+
+## Judges join (about 2 minutes, the part to rehearse most)
+All V2V below is **simulated** in the backend and says so on screen.
+1. A judge scans a gate QR code (or `/driver.html`), picks **vehicle** or **ambulance**, and gets a car with a colour and plate. No name, no account.
+2. **Vehicle:** drives a virtual car along a random trip. When an ambulance comes up behind them on their route they get a full-screen takeover with the fixed wording and an ETA band; a car on another road gets nothing. When the route changes they are told it no longer approaches; later "has passed".
+3. **Ambulance:** picks a start and a destination, starts the trip (signal priority and rerouting as in the scripted run) and can press *Raise emergency alert*, a simulated V2V broadcast that reaches only vehicles on its route ahead. The alert has a 15 s cooldown and only the ambulance role can send it.
+4. At arrival each phone shows a trip receipt and the session is deleted. The presenter screen's guest panel shows who was warned and who was not.
+The same flow is available as a feed for the big screen (`docs/GUEST_API.md`).
 
 ## Optional extras (pick what time allows)
 1. **Phone, live (60 s):** an audience member opens `/driver.html`, picks an entrance and a destination, drives a virtual car. During the ambulance run only they, if on its corridor, get the emergency alert; a car on another road gets nothing.
@@ -66,8 +75,8 @@ The trip time in the tiles is a measurement of one scripted run, **not** a benef
 ## Claims we can and cannot make
 | Can say (verified) | Cannot say (not yet) |
 |---|---|
-| Every signal command passes a deterministic validator; min green, yellow, all-red are always enforced | that the ESP32 controller works on hardware (firmware compiles; not yet flashed or wired) |
-| Warnings use fixed, lawful wording; phones and public views never expose emergency-vehicle ids, routes or positions; relevance is decided on the server | that vision counts are accurate on a real table (verified only on a synthetic camera) |
+| Every signal command passes a deterministic validator; min green, yellow, all-red are always enforced | that the ESP32 table, car or camera work on hardware (they compile and their logic passes host tests; not yet flashed or bench-tested) |
+| Warnings use fixed, lawful wording; phones and public views never expose emergency-vehicle ids, routes or positions; relevance is decided on the server | that vision counts are accurate on a real feed (verified only on a synthetic camera; the table has no camera) |
 | All restricted actions **and denials** are audit-logged; viewer / operator / admin enforced on the backend | that the LLM improves outcomes (it explains and proposes; humans confirm; control never depends on it) |
 | Stale data is shown as stale, never as zero; a starvation bug found by our own evaluation was fixed and is now regression-tested | any benefit figure for a real road — the numbers in `docs/RESULTS.md` come from our simulator's models and are labelled as such |
 | Measured (simulated) results come with seeds, spread and paired comparisons — including the cases where a feature does **not** help | that rerouting helps around a moderate jam (it does not in our model; it helps around a blocked road) |

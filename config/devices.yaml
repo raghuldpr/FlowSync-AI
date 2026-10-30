@@ -1,18 +1,27 @@
 # DEV KEYS ONLY. Override the file location with FLOWSYNC_DEVICES_PATH for the real demo.
+#
+# The hardware demo (tabletop, car brain, ESP32-CAM) is STANDALONE: those boards do not talk to the backend and have
+# no entry here. The entries below are used by the simulator, SUMO, the vision tools and the tests, and are the
+# "future work" path for a backend-connected controller. Keys and roles are unchanged on purpose: tests depend on them.
 devices:
-  intersection-1:
+  intersection-1:                     # today: the simulator's and SUMO's control channel for all three intersections
     key: dev-intersection-1-change-me
     role: intersection_controller
     intersections: [I1, I2, I3]
-  camera-1:
+  # Future work, NOT active: a backend-connected tabletop on two ESP32s would split ownership like this
+  # (each board gets its own key; ESP32 #1 drives I1+I2, ESP32 #2 drives I3, see docs/HARDWARE_WIRING.md).
+  #   intersection-1: { key: <new key>, role: intersection_controller, intersections: [I1, I2] }
+  #   intersection-2: { key: <new key>, role: intersection_controller, intersections: [I3] }
+  # The current firmware/table is standalone and does not use either entry.
+  camera-1:                           # overhead-camera vision pipeline and the synthetic camera (python -m app.vision.run). Not on the table
     key: dev-camera-1-change-me
     role: camera
-  roadcam-1:                          # ESP32-CAM on the connected car (Tier 2: road-surface images)
+  roadcam-1:                          # backend-connected ESP32-CAM firmware (firmware/roadcam). The demo camera (firmware/camtest) is standalone
     key: dev-roadcam-1-change-me
     role: road_camera
   simulator-1:                        # the virtual tabletop's control channel (scenario commands). Remove on the real demo
     key: dev-simulator-1-change-me    # if no simulator is used.
     role: simulator
-  car-1:
+  car-1:                              # scripted/declared emergency vehicle position (ev_car). Guest ambulances use the public guest API, not this key
     key: dev-car-1-change-me
     role: ev_car

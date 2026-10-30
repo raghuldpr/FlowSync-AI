@@ -59,7 +59,9 @@ def main():
     ap.add_argument("--host", help="laptop address on the hotspot (default: first detected LAN address)")
     ap.add_argument("--port", type=int, default=8000)
     a = ap.parse_args()
-    host = a.host or next(iter(lan_addresses()), None)
+    ips = sorted(lan_addresses())
+    # Windows Mobile Hotspot (ICS) gives the laptop 192.168.137.1; prefer it when the hotspot is on.
+    host = a.host or next((ip for ip in ips if ip.startswith("192.168.137.")), None) or next(iter(ips), None)
     if not host:
         raise SystemExit("No LAN address found. Connect to the hotspot first, or pass --host.")
     items = build(host, a.port, Settings().topology_path)
