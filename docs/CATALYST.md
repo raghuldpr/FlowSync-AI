@@ -84,7 +84,7 @@ Note the service URL in the console (development first). Replace `FLOWSYNC_PUBLI
 
 **7. Environment variables, in the Catalyst console** (App Execution Settings or the service's Configuration). Values are per environment: set them for the environment you will use, and for production first do a production deploy.
 
-> **Order matters because of the startup check.** The first deploy may report the service as not started until the three `FLOWSYNC_*_PASSWORD` variables exist. Either set them in the console and then redeploy/restart, or put them under `env_variables` in `deploy\catalystppsailpp-config.json` before the first `catalyst deploy` (that folder is git-ignored and already holds your device keys). Do not paste them anywhere else.
+> **Order matters because of the startup check.** The first deploy may report the service as not started until the three `FLOWSYNC_*_PASSWORD` variables exist. Either set them in the console and then redeploy/restart, or put them under `env_variables` in `deploy\catalyst\appsail\app-config.json` before the first `catalyst deploy` (that folder is git-ignored and already holds your device keys). Do not paste them anywhere else.
 
 | Name | Value |
 |---|---|
