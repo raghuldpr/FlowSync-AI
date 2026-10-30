@@ -227,6 +227,38 @@ def test_client_errors_are_coarse_and_never_contain_the_key(mk, kind):
     assert e.value.kind == kind and SECRET not in str(e.value) and SECRET not in repr(e.value)
 
 
+def test_rate_limited_request_is_retried_once_after_retry_after(monkeypatch):
+    from app.llm import client as client_mod
+    waits, calls = [], []
+    monkeypatch.setattr(client_mod.time, "sleep", lambda s: waits.append(s))
+
+    def handler(r):
+        calls.append(1)
+        if len(calls) == 1:
+            return httpx.Response(429, headers={"retry-after": "3"}, text="slow down " + SECRET)
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+    c = LLMClient(settings(), httpx.MockTransport(handler))
+    assert c.chat([{"role": "user", "content": "x"}])["content"] == "ok"
+    assert len(calls) == 2 and waits and 3 <= waits[0] < 5
+
+
+@pytest.mark.parametrize("retry_after", ["3", "60", None])
+def test_rate_limit_that_persists_or_is_too_long_falls_back_without_the_key(monkeypatch, retry_after):
+    from app.llm import client as client_mod
+    monkeypatch.setattr(client_mod.time, "sleep", lambda s: None)
+    calls = []
+    hdr = {"retry-after": retry_after} if retry_after else {}
+
+    def handler(r):
+        calls.append(1)
+        return httpx.Response(429, headers=hdr, text="limit " + SECRET)
+    c = LLMClient(settings(), httpx.MockTransport(handler))
+    with pytest.raises(LLMError) as e:
+        c.chat([{"role": "user", "content": "x"}])
+    assert e.value.kind == "rate_limited" and SECRET not in repr(e.value)
+    assert len(calls) == (2 if retry_after == "3" else 1)               # one retry only, and none for a long wait
+
+
 def test_not_configured_client_is_disabled():
     for kw in (dict(llm_enabled=False), dict(llm_api_key=""), dict(llm_base_url=""), dict(llm_model="")):
         c = LLMClient(settings(**kw))
