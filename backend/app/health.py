@@ -48,7 +48,7 @@ def report(ctx) -> dict:
                            ("admin", ctx.settings.admin_password)) if p in DEFAULT_OPERATOR_PASSWORDS]
     keys = [d for d, s in ctx.device_specs.items() if "change-me" in s["key"]]
     if weak or keys:
-        checks.append(_c("credentials", "warn", f"development defaults in use (accounts: {', '.join(weak) or 'none'}; device keys: {len(keys)}). Change before an open demo"))
+        checks.append(_c("credentials", "warn", f"development defaults in use (accounts: {', '.join(weak) or 'none'}; device keys: {len(keys)}). Change before an open demo (python -m app.setup_demo)"))
     else:
         checks.append(_c("credentials", "ok", "no development defaults"))
 
