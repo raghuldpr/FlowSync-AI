@@ -104,8 +104,8 @@ export function V2vBanner() {
   }, [key])
   if (!feed || !last || !(fresh || feed.warned > 0)) return null
   return (
-    <div role="status" className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-lg bg-danger/90 px-4 py-2 text-center text-white shadow-lg ring-1 ring-white/20 backdrop-blur">
-      <div className="flex items-center justify-center gap-2 text-[13px] font-semibold">
+    <div role="status" className="pointer-events-none absolute left-3 top-[5.25rem] z-10 max-w-[calc(100%-5rem)] rounded-lg bg-danger/90 px-3.5 py-2 text-white shadow-lg ring-1 ring-white/20 backdrop-blur">
+      <div className="flex items-center gap-2 text-[13px] font-semibold">
         <Radio size={15} aria-hidden /> SIMULATED V2V · Emergency vehicle alert
       </div>
       <div className="text-[11.5px] opacity-90">{last.from}: heard by {last.heard} of {last.drivers} cars · {feed.warned} of {feed.total} warned now</div>
