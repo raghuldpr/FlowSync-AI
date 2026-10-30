@@ -20,6 +20,7 @@ static version of the same statement.
 | Pothole finder | classical-vision **heuristic** (dark patch), verified on synthetic images only; every detection needs operator verification | printed dark prop on the road | — |
 | City-scale network (12 intersections) | **Built** (generator + the same controller) | — | **Simulated** (`topology.grid.yaml`) |
 | Measured A/B results (`docs/RESULTS.md`) | harness is real | — | numbers come from the **simulator's models** |
+| SUMO road-traffic view (`sumosim/`) | **Built** — bridge, network generated from `topology.yaml`, ambulance + scenario ops, tests | — | **Simulated**: SUMO's driver model supplies vehicles; our real controller sets the lights through the same signed device API (`docs/RESULTS_SUMO.md`) |
 
 ## What "simulated" means here
 * The simulator replaces **physics** (cars arriving, queues draining, a car driving along its route) and the **device side** of the
