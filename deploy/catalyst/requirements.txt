@@ -1,0 +1,7 @@
+# Only what the hosted backend needs to start. OpenCV, NumPy, SUMO and QR packages are NOT needed:
+# OpenCV is imported only when a camera image is uploaded (the boards are standalone, so that path is unused).
+fastapi
+uvicorn
+pydantic
+pyyaml
+httpx

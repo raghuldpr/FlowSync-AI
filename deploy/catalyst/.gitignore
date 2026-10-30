@@ -1,0 +1,4 @@
+# Generated, or tied to your own Catalyst account. Never commit these.
+appsail/
+.catalystrc
+catalyst.json
