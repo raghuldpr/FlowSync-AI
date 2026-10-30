@@ -18,7 +18,7 @@ from .pothole_model import DEFAULT_PATH, model_path
 REPO = "vinothvikas1987/pothole-detection-yolov8"
 REVISION = "main"
 URL = f"https://huggingface.co/{REPO}/resolve/{REVISION}/best.onnx"
-PINNED_SHA256 = ""                    # filled in after the first reviewed download (docs/POTHOLE_MODEL.md)
+PINNED_SHA256 = "590a20e8c4a7bcbdb32e8a3b7b3a3c1d57d1fa8a7dde5c83fcec8928a4aa753f"   # matches the SHA-256 shown on the model page; 44,752,195 bytes
 MIN_BYTES, MAX_BYTES = 30_000_000, 80_000_000
 
 

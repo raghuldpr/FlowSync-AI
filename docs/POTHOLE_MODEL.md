@@ -21,7 +21,7 @@ The pothole layer judges see on their phones comes from the software simulation 
 ```
 python -m app.vision.fetch_model        # run from the repository root with PYTHONPATH=backend
 ```
-Downloads to `models/pothole_yolov8s_rdd.onnx` (git-ignored), checks the size and the SHA-256, and deletes the file if the hash does not match. Set `FLOWSYNC_POTHOLE_MODEL` to use another path.
+Downloads to `models/pothole_yolov8s_rdd.onnx` (git-ignored), checks the size and the pinned SHA-256 (`590a20e8…a753f`, 44,752,195 bytes), and deletes the file if the hash does not match. Set `FLOWSYNC_POTHOLE_MODEL` to use another path.
 
 ## Behaviour (also when images come in through the device API)
 - Model installed: detections are labelled `camera_model`.

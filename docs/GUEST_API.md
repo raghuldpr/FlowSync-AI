@@ -90,7 +90,8 @@ Not used in the demo (the ESP32-CAM is standalone). If used, the pothole detecto
 ## Pothole model
 - Source: <https://huggingface.co/vinothvikas1987/pothole-detection-yolov8>, file `best.onnx` (about 45 MB), YOLOv8s fine-tuned on the Road Damage Dataset.
 - Licence: Apache-2.0, as stated on the model card (re-check before redistributing).
-- SHA-256: **not pinned yet.** The weights have not been downloaded (the user must approve it). `python -m app.vision.fetch_model` downloads to `models/pothole_yolov8s_rdd.onnx` (git-ignored), prints the size and SHA-256, and refuses a file that is not 30–80 MB or whose hash differs from `PINNED_SHA256` in `backend/app/vision/fetch_model.py` once that is set.
+- SHA-256: `590a20e8c4a7bcbdb32e8a3b7b3a3c1d57d1fa8a7dde5c83fcec8928a4aa753f` (44,752,195 bytes), the same value the model page shows. It is pinned in `backend/app/vision/fetch_model.py`; `python -m app.vision.fetch_model` downloads to `models/pothole_yolov8s_rdd.onnx` (git-ignored) and deletes any file whose hash differs.
+- Output checked: the model loads with OpenCV DNN and returns shape (1, 9, 8400), as the decoder expects. Detection quality on real ESP32-CAM photos is **not yet measured**.
 - Until the weights are installed, the heuristic runs and detections are labelled `camera_heuristic`.
 - Offline use: `python -m app.vision.detect_images photos/*.jpg --out data/pothole_out`. See `docs/POTHOLE_MODEL.md`.
 
