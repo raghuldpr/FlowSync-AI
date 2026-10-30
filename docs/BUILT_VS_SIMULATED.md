@@ -8,15 +8,16 @@ static version of the same statement.
 | Component | In software (always real code) | Physical tabletop | Simulation |
 |---|---|---|---|
 | Signal decision logic: pressure control, spillback and gridlock rules, validator, min green / yellow / all-red | **Built** — identical in every mode | same code | same code |
-| Intersection controller (3 intersections, 18 lamps) | firmware core is ported and tested against the reference | ESP32 + 3× 74HCT595 + LEDs — **firmware compiles (esp32dev, lamptest); not yet flashed or wired** | virtual tabletop runs the *same* state machine |
-| Queue counts and "stationary" time | vision pipeline (ArUco calibration, background differencing) — verified on a synthetic camera | overhead phone camera — **not yet run on a real feed** | simulator counts, or a synthetic camera whose images go through the real pipeline |
-| Emergency-vehicle position | ArUco tracking → road + progress | toy car with roof marker — **not yet tested** | scripted driver following the system's current route |
+| Intersection controller (3 intersections) | firmware core is ported and tested against the reference | **standalone** tabletop: 2 ESP32 DevKits light 6 traffic modules directly from pins, built-in cycle + scripted ambulance corridor, **no backend link** — firmware compiles and its logic is host-tested; **not yet flashed or wired** | virtual tabletop runs the *same* state machine |
+| Queue counts and "stationary" time | vision pipeline (ArUco calibration, background differencing) — verified on a synthetic camera | not on the table (no overhead camera); shown by screen-recording `run_sim --demo --vision` | simulator counts, or a synthetic camera whose images go through the real pipeline |
+| Emergency-vehicle position | ArUco tracking → road + progress | not on the table (no toy car or marker) | scripted driver following the system's current route |
+| Connected car (sensors, alerts) | alert logic host-tested | **standalone** car brain: HC-SR04 obstacle beeps, MPU-9250 bump/crash alerts, button "emergency alert" shown on an LCD and a buzzer; **local only, not transmitted** — compiles; **not yet flashed or bench-tested** | the V2V broadcast to other vehicles is simulated in the backend |
 | Routing, rerouting, warnings (update / redirect / cancel / stale) | **Built** | same | same |
 | Incident detection, impact assessment, alerts | **Built** (congestion, stalled vehicle) | triggered by real queue behaviour | triggered by scripted world events |
 | Roles, audit log, public redaction | **Built** | same | same |
 | LLM reasoning layer | **Built**; verified against a stand-in model only; labelled fallback | needs internet + key | same |
 | Road users (phones): sessions, relevance, alerts, route suggestions | **Built** (server-side relevance, fixed wording, privacy-minimal) | judges' phones join at `/driver.html` | each phone user drives a **virtual** car (dead reckoning); no GPS |
-| Road conditions: hazard workflow, route penalty, alerts, image upload | **Built** | ESP32-CAM firmware compiles; **not flashed**; operator reports work without it | scripted/operator-declared hazards |
+| Road conditions: hazard workflow, route penalty, alerts, image upload | **Built** | standalone ESP32-CAM web camera (`camweb`, own Wi-Fi, takes photos; not linked to the software) compiles, **not flashed**; the backend-connected `roadcam` firmware also compiles, **not flashed**; operator reports work without a camera | scripted/operator-declared hazards |
 | Pothole finder | classical-vision **heuristic** (dark patch), verified on synthetic images only; every detection needs operator verification | printed dark prop on the road | — |
 | City-scale network (12 intersections) | **Built** (generator + the same controller) | — | **Simulated** (`topology.grid.yaml`) |
 | Measured A/B results (`docs/RESULTS.md`) | harness is real | — | numbers come from the **simulator's models** |
