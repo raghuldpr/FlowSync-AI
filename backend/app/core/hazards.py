@@ -53,6 +53,13 @@ class HazardManager:
             self._refresh()
             return hid
 
+    def find_active(self, kind: str, edge: str, progress: float = None, tol: float = 0.15):
+        """Id of an unreviewed/open hazard of this kind on this road near this position (so one pothole seen in many frames is one report)."""
+        for r in self.db.query("SELECT id, progress FROM hazards WHERE kind=? AND edge=? AND status IN ('reported','open') ORDER BY id DESC", (kind, edge)):
+            if progress is None or r["progress"] is None or abs(r["progress"] - progress) <= tol:
+                return r["id"]
+        return None
+
     def _move(self, hid: int, frm: tuple, to: str, actor: str, col: str = "decided") -> bool:
         with self._lock:
             row = self.db.one("SELECT status FROM hazards WHERE id=?", (hid,))

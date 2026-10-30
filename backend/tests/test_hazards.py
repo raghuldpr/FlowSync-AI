@@ -125,7 +125,16 @@ def test_upload_stores_under_a_server_generated_name(client, ctx, op_headers):
     got = client.get(f"/api/operator/images/{iid}", headers=op_headers)
     assert got.status_code == 200 and got.content == JPEG and got.headers["content-type"] == "image/jpeg"
     assert got.headers["x-content-type-options"] == "nosniff"
+    assert got.headers["x-detection"] == "[]", "detector boxes travel with the image for the dashboard overlay"
     assert client.get(f"/api/operator/images/{iid}").status_code == 401, "images are operator-only"
+
+
+def test_camera_frames_lists_every_upload_with_time_even_without_a_hazard(client, ctx, op_headers):
+    iid = upload(client, ctx).json()["image"]
+    assert client.get("/api/operator/camera-frames").status_code == 401, "frame list is not public"
+    frames = client.get("/api/operator/camera-frames", headers=op_headers).json()["frames"]
+    assert [f["id"] for f in frames] == [iid] and frames[0]["created_at"] and frames[0]["edge"] == "L13"
+    assert frames[0]["detections"] == [] and ctx.hazards.list() == [], "a frame with no detection is listed but raises no hazard"
 
 
 @pytest.mark.parametrize("data,why", [
@@ -214,3 +223,25 @@ def test_camera_detection_becomes_an_unreviewed_report_that_needs_an_operator(cl
     assert ctx.store.hazard_penalty == {"L12": 8.0}
     clean = upload(client, ctx, jpeg(road()), edge="L12")
     assert clean.json()["detections"] == 0 and clean.json()["reported_hazard"] is None
+
+
+# ---- one pothole in many frames; simulated authority hand-off ------------------------------------------------------
+def test_find_active_matches_same_road_and_nearby_position(ctx):
+    hid = ctx.hazards.create("pothole", "L13", "low", "camera_heuristic", status="reported", progress=0.5)
+    assert ctx.hazards.find_active("pothole", "L13", 0.55) == hid
+    assert ctx.hazards.find_active("pothole", "L13", 0.9) is None
+    assert ctx.hazards.find_active("pothole", "L12", 0.5) is None
+    assert ctx.hazards.find_active("debris", "L13", 0.5) is None
+    ctx.hazards.reject(hid, "op")
+    assert ctx.hazards.find_active("pothole", "L13", 0.5) is None, "a rejected report must not hide a new sighting"
+
+
+def test_authority_report_needs_a_verified_hazard_and_is_sent_once(client, ctx, op_headers):
+    hid = ctx.hazards.create("pothole", "L13", "medium", "camera_heuristic", status="reported", progress=0.5)
+    assert client.post(f"/api/operator/hazards/{hid}/notify-authority").status_code == 401
+    assert client.post(f"/api/operator/hazards/{hid}/notify-authority", headers=op_headers).status_code == 409
+    ctx.hazards.verify(hid, "op")
+    assert client.post(f"/api/operator/hazards/{hid}/notify-authority", headers=op_headers).status_code == 200
+    assert client.post(f"/api/operator/hazards/{hid}/notify-authority", headers=op_headers).status_code == 409
+    out = client.get("/api/operator/authority-reports", headers=op_headers).json()
+    assert out["simulated"] is True and [r["hazard_id"] for r in out["reports"]] == [hid]
