@@ -1,71 +1,59 @@
-# Intersection controller wiring (supersedes HW spec §4.1 / §4.3 / §4.4)
+# Tabletop wiring: two ESP32 DevKits, six traffic modules
 
-One ESP32 DevKit drives all 18 traffic LEDs through **three daisy-chained 74HCT595** shift registers (one per
-intersection, 6 LEDs each). This replaces the old 9-GPIO direct-drive map, which could not drive 18 LEDs and used boot-strapping pins.
+The tabletop is a **standalone traffic-light demo**: two ESP32 DevKits light six 4-pin traffic modules (GND, R, Y, G) straight from
+their GPIO pins. There is no camera, no ArUco marker and no toy car on the table, and no shift register. The table runs a built-in
+cycle plus an ambulance-priority sequence with no Wi-Fi, so the hotspot cannot break it. The software demo (phones, backend, SUMO)
+is separate and is not wired to the table. This replaces the earlier one-ESP32 + 74HCT595 design. The backend-connected controller
+(`firmware/intersection`) still exists as future work.
 
-> Status: design + firmware core verified on a PC. **Not yet wired or tested on real hardware** — verify against your exact
-> DevKit pinout and 74HCT595 datasheet before powering up.
+> Status: firmware compiles and its logic is host-tested; **wiring and the lamps have not yet been checked on a board.** Bench-test
+> every module with the `board1_test` / `board2_test` firmware (section 4) before gluing anything.
 
-## ESP32 pins
+## 1. Which module is which
 
-| Signal | GPIO | Goes to | Notes |
+| Board | Module | Lamp | Role |
 |---|---|---|---|
-| DATA | 23 | 595 #1 pin 14 (SER) | |
-| CLOCK | 18 | pin 11 (SRCLK) on all three | |
-| LATCH | 19 | pin 12 (RCLK) on all three | all 18 LEDs update at once |
-| OE | 21 | pin 13 (OE, active LOW) on all three | **10 kΩ pull-up to 3V3** |
+| ESP32 #1 | M1 | I1-A | intersection I1, movement A (ring) |
+| ESP32 #1 | M2 | I1-B | I1, movement B (external road) |
+| ESP32 #1 | M3 | I2-A | I2, movement A |
+| ESP32 #1 | M4 | I2-B | I2, movement B |
+| ESP32 #2 | M1 | I3-A | I3, movement A |
+| ESP32 #2 | M2 | I3-B | I3, movement B |
 
-None of these are strapping pins (0, 2, 5, 12, 15 avoided) or WROVER PSRAM pins (16, 17). Pins 34/35/36/39 are input-only and
-reserved for the Tier-2 ultrasonic ECHO lines (TRIG 4/13/14 via dividers).
+## 2. Pins (R / Y / G)
 
-## 74HCT595 (DIP-16) — every chip
+| Board | Module | Red | Yellow | Green |
+|---|---|---|---|---|
+| ESP32 #1 | M1 (I1-A) | D23 | D22 | D21 |
+| ESP32 #1 | M2 (I1-B) | D19 | D18 | D27 |
+| ESP32 #1 | M3 (I2-A) | D26 | D25 | D33 |
+| ESP32 #1 | M4 (I2-B) | D32 | D14 | D13 |
+| ESP32 #2 | M1 (I3-A) | D23 | D22 | D21 |
+| ESP32 #2 | M2 (I3-B) | D19 | D18 | D27 |
 
-| Pin | Connect to |
-|---|---|
-| 16 Vcc | **5 V** + 0.1 µF to GND, close to the chip (HCT inputs accept 3.3 V logic: V_IH = 2.0 V) |
-| 8 GND | GND (common with the ESP32) |
-| 10 SRCLR | **5 V** (never leave floating) |
-| 11 SRCLK / 12 RCLK / 13 OE | from the ESP32 as above (shared by the three chips) |
-| 14 SER | #1: GPIO 23 · #2: pin 9 of #1 · #3: pin 9 of #2 |
-| 9 Q7' | to SER (pin 14) of the next chip; leave open on #3 |
+* **Ground:** every module's GND goes to one breadboard ground rail, joined to an ESP32 GND pin. Join the two boards' grounds too if
+  they share one power supply.
+* **Avoid** TX0 (D1), RX0 (D3) and D12 (a boot-strapping pin: a lamp on it can stop the board from booting).
+* **No resistors:** the modules lit directly from the pins in the bench test (one green is dimmer but fine). Do not power anything
+  from a GPIO pin other than these lamps, and keep each module to one lit lamp at a time (the firmware does).
+* **BOOT button** (GPIO0, on the DevKit): starts the ambulance sequence now. Press it on both boards together to keep them in step.
 
-Chip #1 = intersection **I1**, #2 = **I2**, #3 = **I3** (the chip nearest the ESP32 is I1). The firmware shifts I3's byte first.
+## 3. Mounting
+Modules lie flat beside the roads, outside the lanes, with the red, yellow and green dots running along each road, red at the same
+end on all six. Drill a 5-6 mm hole beside each module for its leads. Mount the ESP32s and breadboard under the board.
 
-## LED outputs — same on all three chips
+## 4. Bench test before the demo (`board1_test`, `board2_test`)
+```
+pio run -d firmware/table -e board1_test -t upload ; pio device monitor -d firmware/table
+```
+Serial commands (115200): `h` help, `m` pin map, `l` walk every lamp one at a time (R, Y, G of each module in order), `r` / `y` / `g`
+all lamps that colour (wiring check only), `o` all red, `c` 10 s safe A/B cycle. Expected: `l` lights exactly one lamp per second and
+prints its name and pin. Fix any module that lights the wrong colour by swapping its wires, then flash the real firmware (`board1` /
+`board2`). Same for board 2 with `board2_test`.
 
-| 595 output | DIP pin | Lamp | Resistor (5 V) |
-|---|---|---|---|
-| Q0 | 15 | Movement A — Red | 330 Ω |
-| Q1 | 1 | Movement A — Yellow | 330 Ω |
-| Q2 | 2 | Movement A — Green | 150–220 Ω |
-| Q3 | 3 | Movement B — Red | 330 Ω |
-| Q4 | 4 | Movement B — Yellow | 330 Ω |
-| Q5 | 5 | Movement B — Green | 150–220 Ω |
-| Q6, Q7 | 6, 7 | unused — leave open | |
-
-Wiring per LED: `Qx → resistor → LED anode, LED cathode → GND`. That is 18 LEDs + 18 resistors.
-
-### Why these values
-* The 595 runs at 5 V so green LEDs (V_f up to ~3 V) get usable current; at 3.3 V they would barely light. Measure V_f of
-  *your* LEDs and aim for 5–10 mA each (≤ 20 mA/pin, ≤ 70 mA/package). At most **two LEDs per chip** are lit at any time
-  (one per movement), so each chip stays below ~20 mA.
-* **OE pull-up (to 3V3, not 5 V)** keeps every output high-impedance (LEDs dark) while the ESP32 resets or boots. Firmware latches
-  *all-red* first and only then pulls OE low, so there is no moment with an undefined lamp pattern. A 5 V pull-up would push
-  current into the 3.3 V-only GPIO.
-* One latch pulse updates all LEDs together, so no transient conflicting green can appear while bits are shifting.
-
-## Power
-Power the 595s and LEDs from the 5 V rail of the same supply as the ESP32 (USB hub / power bank), share **GND**, add ~100 µF near
-the chips. Budget well under 200 mA for all LEDs. Do not power anything from GPIO pins.
-
-## Network (most common demo failure)
-* ESP32 is **2.4 GHz only**. Use a dedicated router/hotspot: 2.4 GHz, WPA2 (not WPA3-only), fixed channel 1/6/11, no client isolation.
-* Give the laptop a DHCP reservation (or use its mDNS name) and put it in `BACKEND_HOST`.
-* Start the backend on the LAN: `uvicorn app.main:app_factory --factory --host 0.0.0.0 --port 8000`, and allow inbound TCP 8000 in the Windows firewall for the private network.
-* Use real device keys: edit `config/devices.yaml` (and the same key in `firmware/intersection/include/config.h`).
-
-## Bring-up order (HW spec §10, steps 2–5)
-1. Build `pio run -e lamptest -t upload` — lights **one LED at a time** in order I1 A_R, A_Y, A_G, B_R, B_Y, B_G, then I2, I3. Check polarity, colours, brightness, and that the order matches the table (swapped chips ⇒ swapped intersections).
-2. Power-cycle with *no* firmware running (or hold EN low): all LEDs must stay **off** (OE pull-up works).
-3. Flash the main firmware with the backend **off**: boot shows all-red, then after 5 s the fixed-time fallback alternates A/B every 8 s per intersection, always through yellow + 1 s all-red.
-4. Start the backend + camera/simulator: the dashboard should show device reports in sync and commands acknowledged; kill the backend and confirm fallback within ~5 s; restart and confirm recovery.
+## 5. What the demo does (`board1`, `board2`)
+* Normal cycle: each intersection alternates A / B with min green, yellow, all-red (timings generated from `config/topology.yaml`),
+  always through yellow and a 1 s all-red, never two axes lit at once. This is the same state machine as the backend (`signal_fsm`).
+* Ambulance priority: every 50 s loop, from 36 s to 50 s, I1 holds B green and I2 holds A green (the West to East corridor), still
+  through yellow and all-red. I3 keeps cycling. The BOOT button starts the same 14 s sequence immediately.
+* This is a scripted demonstration of the behaviour. The software simulation shows how it is decided.
