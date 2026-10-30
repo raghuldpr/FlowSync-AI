@@ -379,6 +379,35 @@ function drawAssistant(d) {
     ${p.status === "pending" ? `<div class="row" style="margin-top:6px"><button data-pc="${p.id}">Confirm</button><button class="ghost" data-pd="${p.id}">Decline</button></div>` : ""}</div>`).join(""));
 }
 
+/* ---------- assistant trace ---------- */
+const SRC_CLS = { fallback: "warn", stand_in: "stale", provider: "ok" };
+const VERDICT_CLS = { pending: "warn", rejected: "bad", confirmed: "ok", declined: "stale", expired: "stale" };
+function traceHtml(t) {
+  const steps = t.steps.map((s) => `<div class="row" style="align-items:baseline"><span class="chip ${s.ok ? "" : "bad"}">${esc(s.tool)}</span>
+    <span class="mono muted">${esc(JSON.stringify(s.args))}</span></div><div class="muted" style="margin:0 0 4px 8px">${esc(s.result)}</div>`).join("")
+    || `<div class="muted">No tools were read.</div>`;
+  const props = t.proposals.map((p) => `<div class="row"><b>Proposal #${p.id}: ${esc(p.intersection)} → axis ${esc(p.axis)} for ${p.duration_s}s</b>
+    <span class="chip ${VERDICT_CLS[p.validator_verdict] || ""}">validator: ${esc(p.validator_verdict)}</span><span class="muted">${esc(p.validator_reason)}</span></div>
+    <div class="muted" style="margin-left:8px">${esc(p.note)}</div>`).join("");
+  return `<details class="incident" style="border-left:4px solid var(--line)"><summary><span class="mono muted">${esc(t.ts.slice(11, 19))}</span>
+    <b>${esc(t.question)}</b> <span class="chip ${SRC_CLS[t.source.kind] || ""}">${esc(t.source.label)}${t.source.model ? " · " + esc(t.source.model) : ""}${t.fallback_reason ? " · " + esc(t.fallback_reason) : ""}</span>
+    ${t.proposals.length ? `<span class="chip warn">${t.proposals.length} proposal</span>` : ""}</summary>
+    <div style="margin-top:6px"><div class="muted">1. Question asked by ${esc(t.actor)}</div><div class="muted">2. Read-only tools</div>${steps}
+    <div class="muted" style="margin-top:4px">3. Proposal and validator</div>${props || `<div class="muted" style="margin-left:8px">None. The assistant cannot change anything itself.</div>`}</div></details>`;
+}
+let traceBusy = false;
+async function pollTraces() {
+  if (traceBusy || !token) return;
+  traceBusy = true;
+  try {
+    const rows = await api("GET", "/api/operator/llm/traces?limit=8");
+    $("#trace-n").textContent = String(rows.length);
+    if (rows.length) setHtml("#traces", rows.map(traceHtml).join(""));
+  } catch (e) { /* not signed in, or the panel is not available: leave the last trace on screen */ }
+  traceBusy = false;
+}
+setInterval(pollTraces, 2000);
+
 $("#ask-form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const q = $("#ask-q").value.trim(); if (!q) return;
@@ -390,7 +419,7 @@ $("#ask-form").addEventListener("submit", async (ev) => {
     out.innerHTML = `<div class="row"><span class="chip ${r.mode === "llm" ? "ok" : "warn"}">${r.mode === "llm" ? "LLM · " + esc(r.model) : "DETERMINISTIC FALLBACK" + (r.fallback_reason ? " · " + esc(r.fallback_reason) : "")}</span>${tools}</div>
       <div style="white-space:pre-wrap;margin-top:6px">${esc(r.answer)}</div>
       ${r.proposals.length ? "<div class='muted' style='margin-top:6px'>Proposal(s) queued below — they act only after you confirm.</div>" : ""}`;
-    refresh();
+    refresh(); pollTraces();
   } catch (e) { out.innerHTML = `<span style="color:var(--bad)">${esc(e.message)}</span>`; }
   go.disabled = false;
 });
