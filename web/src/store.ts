@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { create } from 'zustand'
 import { loadAuth, saveAuth, type Auth } from './api'
-import { liveSnapshot, mapIncident, type ApiIncident, type FlowPt, type Overview, type Topo } from './live'
+import { liveSnapshot, mapIncident, type ApiIncident, type Feed, type FlowPt, type Overview, type Topo } from './live'
 import { snapshot, type Snap } from './sim'
 
 export type Nav = 'overview' | 'stage' | 'traffic' | 'signals' | 'emergencies' | 'incidents' | 'scenarios' | 'assistant' | 'status' | 'provenance' | 'settings'
@@ -12,6 +12,10 @@ export interface ChatMsg { role: 'user' | 'assistant'; text: string }
 export interface LiveState {
   topo: Topo | null; ov: Overview | null; incidents: ApiIncident[]; priority: number
   ok: boolean; err: string | null; since: number; updated: number; flow: FlowPt[]
+  /** Big-screen guest feed; null when the endpoint is unavailable (the overview's road_users still draw the cars). */
+  feed: Feed | null
+  /** When each road user was first seen (epoch ms); 0 = already there on the first snapshot, so it does not ripple. */
+  born: Record<string, number>
 }
 
 interface S {
@@ -34,7 +38,7 @@ interface S {
   pollNow: number; bumpPoll: () => void
 }
 
-const EMPTY_LIVE: LiveState = { topo: null, ov: null, incidents: [], priority: 0, ok: false, err: null, since: Date.now(), updated: 0, flow: [] }
+const EMPTY_LIVE: LiveState = { topo: null, ov: null, incidents: [], priority: 0, ok: false, err: null, since: Date.now(), updated: 0, flow: [], feed: null, born: {} }
 
 export const useStore = create<S>((set) => ({
   T: 85, setT: (T) => set({ T }),

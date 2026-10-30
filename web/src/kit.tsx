@@ -80,8 +80,8 @@ export function Buildings({ lots }: { lots: Lot[] }) {
 }
 
 /* ---------- vehicles ---------- */
-export function CarShape({ status }: { status: CarStatus }) {
-  const hex = STATUS_HEX[status]
+export function CarShape({ status, color }: { status: CarStatus; color?: string }) {
+  const hex = color ?? STATUS_HEX[status]
   return (
     <>
       <mesh position={[0, 0.34, 0]}><boxGeometry args={[1.5, 0.42, 0.8]} /><meshStandardMaterial color={hex} emissive={hex} emissiveIntensity={status === 'neutral' || status === 'unwarned' ? 0.15 : 0.6} roughness={0.4} /></mesh>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Assistant, Incidents, Provenance, Scenarios, Settings, SystemStatus, Traffic } from './Screens'
 import { BuiltVsSimulated, Card, CityStats, CurrentEvent, KpiRow, RecentEvents, SelfChecks, SignalRow, SignalStatus, TrafficFlow } from './Cards'
+import { GuestsCard } from './guests'
 import MapPanel from './MapPanel'
 import { Header, LoginDialog, Sidebar } from './Shell'
 import { useLivePoller } from './useLive'
@@ -52,7 +53,7 @@ function Overview() {
         </div>
       </div>
       <div className="flex flex-col gap-4">
-        <CurrentEvent s={s} /><SelfChecks s={s} /><BuiltVsSimulated /><CityStats s={s} />
+        <CurrentEvent s={s} /><GuestsCard /><SelfChecks s={s} /><BuiltVsSimulated /><CityStats s={s} />
       </div>
     </div>
   )
@@ -68,7 +69,7 @@ function Emergencies() {
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
       <MapPanel className="h-[60vh]" />
-      <div className="flex flex-col gap-4"><CurrentEvent s={s} /><SelfChecks s={s} />
+      <div className="flex flex-col gap-4"><CurrentEvent s={s} /><GuestsCard /><SelfChecks s={s} />
         <Card title="Preemption"><ul className="divide-y divide-line">{s.signals.filter((g) => g.preempt).map((g) => <SignalRow key={g.id} g={g} />)}
           {!s.signals.some((g) => g.preempt) && <li className="py-2 text-[13px] text-muted">No signals are currently held green.</li>}</ul></Card></div>
     </div>

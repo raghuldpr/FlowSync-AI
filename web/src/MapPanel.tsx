@@ -1,5 +1,6 @@
 import { lazy, Suspense, useState } from 'react'
 import { Crosshair, Layers as LayersIcon } from 'lucide-react'
+import { V2vBanner } from './guests'
 import { useStore, type Layers } from './store'
 
 const Scene = lazy(() => import('./Scene'))
@@ -50,6 +51,8 @@ export default function MapPanel({ className = '' }: { className?: string }) {
         </p>
       </div>
 
+      {live && <V2vBanner />}
+
       <div className="absolute right-3 top-3 flex flex-col gap-2">
         <Ctl label="2D view" active={view === '2d'} onClick={() => setView('2d')}>2D</Ctl>
         <Ctl label="3D view" active={view === '3d'} onClick={() => setView('3d')}>3D</Ctl>
@@ -69,7 +72,7 @@ export default function MapPanel({ className = '' }: { className?: string }) {
       </div>
 
       <div className="pointer-events-none absolute bottom-3 left-3 hidden gap-3 rounded-lg bg-navy/70 px-3 py-1.5 text-[11px] text-slate-300 ring-1 ring-white/10 backdrop-blur sm:flex">
-        <Dot c="bg-white" t="Ambulance" /><Dot c="bg-ok" t="Green corridor" /><Dot c="bg-danger" t="Warned" /><Dot c="bg-[#22d47f]" t="Rerouted" />
+        <Dot c="bg-white" t="Ambulance" /><Dot c="bg-ok" t="Green corridor" /><Dot c="bg-danger" t="Warned" /><Dot c="bg-[#22d47f]" t="Rerouted" />{live && <Dot c="bg-slate" t="Not warned" />}
       </div>
     </section>
   )

@@ -15,7 +15,21 @@ export interface EvSession {
   id: number; vehicle_id: string; origin: string; destination: string; status: string
   edge: string | null; progress: number; stale: boolean; route: string[]; warnings: Record<string, unknown>
 }
-export interface RoadUser { id: string; simulated: boolean; status: string; edge: string | null; progress: number; alerts: Record<string, string> }
+export interface RoadUser {
+  id: string; role?: 'vehicle' | 'ambulance'; color?: string; plate?: string; warned?: boolean
+  simulated: boolean; status: string; edge: string | null; progress: number; alerts: Record<string, string>
+}
+/** One simulated V2V broadcast from /api/operator/road-users/feed (`heard` = cars that received it). */
+export interface V2vEntry { t: number; from: string; heard: number; drivers: number }
+export interface Feed { simulated_v2v: boolean; total: number; warned: number; users: RoadUser[]; ambulances: RoadUser[]; v2v: V2vEntry[] }
+
+const FALLBACK_COLOR = '#4b8bd6'
+/** Guests choose a CSS colour name on the server; never trust it blindly in the 3D scene. */
+export function safeColor(c?: string): string {
+  try { if (c && typeof CSS !== 'undefined' && CSS.supports('color', c)) return c } catch { /* old browser */ }
+  return FALLBACK_COLOR
+}
+export const isWarned = (u: RoadUser) => u.warned ?? Object.values(u.alerts).some((s) => LIVE_ALERT.includes(s))
 export interface ApiIncident {
   id: number; type: string; approach: string; status: string; severity: string; source: string; detected_at: string
   ack_by: string | null; details?: Record<string, unknown>
@@ -131,7 +145,7 @@ export function liveSnapshot(ov: Overview, topo: Topo | null, extra: { priority:
   const label = (id: string) => topo?.nodes[id]?.label ?? id
   const active = ov.ev.find((s) => s.status === 'active')
   const users = ov.road_users
-  const warnedUsers = users.filter((u) => Object.values(u.alerts).some((s) => LIVE_ALERT.includes(s)))
+  const warnedUsers = users.filter(isWarned)
   const rerouted = users.filter((u) => Object.values(u.alerts).includes('redirected')).length
   const notWarned = users.length - warnedUsers.length
 

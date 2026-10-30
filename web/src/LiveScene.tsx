@@ -6,6 +6,7 @@ import * as THREE from 'three'
 import { useStore } from './store'
 import { NODE_R, edgePose, indexTopo, queuePoses, type TopoIndex } from './live'
 import type { CarStatus } from './sim'
+import { GuestCar, guestStatus } from './guests'
 import {
   Ambulance, Atmosphere, Buildings, CameraRig, CarShape, CarTag, Inst, LAMP_HEX, makeChevronTexture, place, reduced, rng,
   type Focus, type Lot, type Pose,
@@ -184,6 +185,25 @@ function LiveCar({ pose, status, tag, id }: { pose: CarPose; status: CarStatus; 
   )
 }
 
+/** One ambulance per active emergency-vehicle session (operator-declared or a guest ambulance). */
+function LiveAmbulance({ sid, idx, ovRef, showRings }: { sid: number; idx: TopoIndex; ovRef: OvRef; showRings: boolean }) {
+  const smooth = useRef<{ x: number; z: number; rot: number; t: number } | null>(null)
+  const getPose = useCallback((): Pose | null => {
+    const s = ovRef.current.ev.find((e) => e.id === sid && e.status === 'active')
+    const p = s?.edge ? edgePose(idx, s.edge, s.progress, 0) : null
+    if (!p) { smooth.current = null; return null }
+    const now = performance.now(), cur = smooth.current
+    if (!cur) { smooth.current = { ...p, t: now }; return { ...p, rings: true } }
+    const k = reduced ? 1 : 1 - Math.exp(-((now - cur.t) / 1000) * 5)
+    cur.x += (p.x - cur.x) * k
+    cur.z += (p.z - cur.z) * k
+    cur.rot += Math.atan2(Math.sin(p.rot - cur.rot), Math.cos(p.rot - cur.rot)) * k
+    cur.t = now
+    return { x: cur.x, z: cur.z, rot: cur.rot, rings: true }
+  }, [idx, sid, ovRef])
+  return <Ambulance showRings={showRings} getPose={getPose} />
+}
+
 export default function LiveWorld() {
   const topo = useStore((s) => s.live.topo)!
   const ov = useStore((s) => s.live.ov)!
@@ -198,43 +218,38 @@ export default function LiveWorld() {
   const emergency = !!active
   const route = useMemo(() => active?.route ?? [], [active?.route?.join('|')]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const cars = useMemo(() => {
-    const out: { id: string; pose: CarPose; status: CarStatus; tag: boolean }[] = []
+  // Queued cars come from the camera counts; guests (phones) are drawn separately so they keep their colour and plate.
+  const queued = useMemo(() => {
+    const out: { id: string; pose: CarPose }[] = []
     for (const [edge, t] of Object.entries(ov.traffic)) {
       if (t.stale) continue
-      queuePoses(idx, edge, Math.min(t.count, 12)).forEach((pose, i) => out.push({ id: `q:${edge}:${i}`, pose, status: 'neutral', tag: false }))
-    }
-    let tags = 0
-    for (const u of ov.road_users) {
-      const pose = u.edge ? edgePose(idx, u.edge, u.progress) : null
-      if (!pose) continue
-      const st = Object.values(u.alerts)
-      const status: CarStatus = st.includes('redirected') ? 'rerouted' : st.some((s) => s === 'active' || s === 'updated') ? 'warned' : emergency ? 'unwarned' : 'neutral'
-      const tag = (status === 'warned' || status === 'rerouted') && tags++ < 6
-      out.push({ id: u.id, pose, status, tag })
+      queuePoses(idx, edge, Math.min(t.count, 12)).forEach((pose, i) => out.push({ id: `q:${edge}:${i}`, pose }))
     }
     return out
-  }, [ov, idx, emergency])
+  }, [ov.traffic, idx])
 
-  const smooth = useRef<{ x: number; z: number; rot: number; t: number } | null>(null)
-  const getPose = useCallback((): Pose | null => {
-    const s = ovRef.current.ev.find((e) => e.status === 'active')
-    const p = s?.edge ? edgePose(idx, s.edge, s.progress, 0) : null
-    if (!p) { smooth.current = null; return null }
-    const now = performance.now(), cur = smooth.current
-    if (!cur) { smooth.current = { ...p, t: now }; return { ...p, rings: true } }
-    const k = reduced ? 1 : 1 - Math.exp(-((now - cur.t) / 1000) * 5)
-    cur.x += (p.x - cur.x) * k
-    cur.z += (p.z - cur.z) * k
-    cur.rot += Math.atan2(Math.sin(p.rot - cur.rot), Math.cos(p.rot - cur.rot)) * k
-    cur.t = now
-    return { x: cur.x, z: cur.z, rot: cur.rot, rings: true }
-  }, [idx])
+  const born = useStore((s) => s.live.born)
+  const guests = useMemo(() => {
+    const out: { u: (typeof ov.road_users)[number]; pose: CarPose; status: CarStatus; bornAt: number; tag: boolean }[] = []
+    let tags = 0
+    for (const u of ov.road_users) {
+      if (u.role === 'ambulance') continue // guest ambulances are drawn from their emergency-vehicle session below
+      const pose = u.edge ? edgePose(idx, u.edge, u.progress) : null
+      if (!pose) continue
+      const status = guestStatus(u, emergency)
+      const tag = !u.simulated ? tags++ < 12 : status !== 'neutral' && tags++ < 12
+      out.push({ u, pose, status, bornAt: born[u.id] ?? 0, tag })
+    }
+    return out
+  }, [ov, idx, emergency, born])
+
   const focus = useCallback<Focus>(() => {
     const s = ovRef.current.ev.find((e) => e.status === 'active')
     const p = s?.edge ? edgePose(idx, s.edge, s.progress, 0) : null
     return p ? { x: p.x, z: p.z } : null
   }, [idx])
+
+  const activeIds = useMemo(() => ov.ev.filter((e) => e.status === 'active').map((e) => e.id), [ov.ev])
 
   const approachEdges = useMemo(() => [...idx.edges.values()].filter((g) => g.edge.approach && g.edge.movement && topo.nodes[g.edge.dst]?.kind === 'intersection'), [idx, topo])
 
@@ -246,8 +261,9 @@ export default function LiveWorld() {
       {layers.route && emergency && <LiveCorridor idx={idx} route={route} />}
       {layers.signals && approachEdges.map((g) => <LampPost key={g.id} edgeId={g.id} idx={idx} ovRef={ovRef} />)}
       {layers.signals && <PreemptBeams idx={idx} ovRef={ovRef} />}
-      {layers.vehicles && cars.map((c) => <LiveCar key={c.id} id={c.id} pose={c.pose} status={c.status} tag={c.tag && layers.warnings} />)}
-      <Ambulance showRings={layers.warnings} getPose={getPose} />
+      {layers.vehicles && queued.map((c) => <LiveCar key={c.id} id={c.id} pose={c.pose} status="neutral" tag={false} />)}
+      {layers.vehicles && guests.map((c) => <GuestCar key={c.u.id} u={c.u} pose={c.pose} status={c.status} bornAt={c.bornAt} tag={c.tag && layers.warnings} />)}
+      {activeIds.map((sid) => <LiveAmbulance key={sid} sid={sid} idx={idx} ovRef={ovRef} showRings={layers.warnings} />)}
       <CameraRig focus={focus} />
     </>
   )
