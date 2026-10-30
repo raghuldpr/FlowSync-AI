@@ -5,8 +5,15 @@
 <h1>FlowSync AI</h1>
 <p class="muted">Traffic-coordination demonstrator. Control decisions are deterministic; this is a prototype, not a certified traffic system.</p>
 <div class="panel" style="display:grid;gap:10px">
+  <a id="bigscreen" href="/screen/"><b>3D big screen (city map)</b></a><span class="muted">The live 3D city: guests' cars, who was warned, the simulated V2V alert. Sign in as the operator for live data; without it, a demo scene is shown.</span>
+  <a href="presenter.html"><b>Presenter view</b></a><span class="muted">Narration with live self-checks. Login required.</span>
   <a href="operator.html"><b>Operator dashboard</b></a><span class="muted">Login required.</span>
   <a href="driver.html"><b>Join as a driver (phone)</b></a><span class="muted">Public. Your own route; alerts only when relevant to you.</span>
   <a href="public.html"><b>Approach view</b></a><span class="muted">Public. Per-approach emergency vehicle warnings.</span>
   <a href="/docs">API docs</a>
-</div></body></html>
+</div>
+<script>
+  // On a laptop the 3D screen is the Vite dev server (npm run dev in web/); on the hosted copy it is served at /screen/.
+  if (location.hostname === "localhost" || location.hostname === "127.0.0.1") document.getElementById("bigscreen").href = "http://" + location.hostname + ":5173/";
+</script>
+</body></html>
