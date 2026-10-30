@@ -1,4 +1,5 @@
-"""Pothole finder for road-camera images (ESP32-CAM JPEGs posted to /api/device/images).
+"""Pothole finder for road-camera images: photos or clips from the standalone ESP32-CAM (python -m app.vision.detect_images),
+or JPEGs posted to /api/device/images (future work: not used in the demo).
 
 Two detectors, always labelled by which one ran:
   * `camera_model`     - a PRETRAINED YOLOv8s road-damage model (see pothole_model.py and docs/POTHOLE_MODEL.md), run on the laptop.

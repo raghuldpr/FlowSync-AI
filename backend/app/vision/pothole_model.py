@@ -1,6 +1,6 @@
 """Pretrained pothole detector (YOLOv8s trained on the Road Damage Dataset), run with OpenCV's DNN module on the laptop.
 
-The ESP32-CAM only takes the picture; inference happens here. No extra dependency: OpenCV is already required for vision.
+The (standalone) ESP32-CAM only takes the picture; inference happens here. No extra dependency: OpenCV is already required for vision.
 The weights are NOT in git. Install them with `python -m app.vision.fetch_model` (see docs/POTHOLE_MODEL.md). When the
 file is missing, pothole.detect_labelled() falls back to the labelled heuristic.
 

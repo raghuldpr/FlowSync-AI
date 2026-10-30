@@ -1,6 +1,12 @@
 # Pothole model
 
-The ESP32-CAM only takes pictures and posts them (`POST /api/device/images`). Detection runs on the laptop.
+The ESP32-CAM is **standalone** on the demo car: its own power, no link to the car brain and no link to the backend. It only takes pictures. Detection runs on the laptop, offline, on those pictures or a recorded clip:
+
+```
+python -m app.vision.detect_images photos/*.jpg --out data/pothole_out     # or a .mp4 with --every 15
+```
+
+The pothole layer judges see on their phones comes from the software simulation (an operator-declared or scripted hazard), not from a live camera feed. The `POST /api/device/images` path still exists and works the same way (future work: a camera that posts to the backend).
 
 | | |
 |---|---|
@@ -17,7 +23,7 @@ python -m app.vision.fetch_model        # run from the repository root with PYTH
 ```
 Downloads to `models/pothole_yolov8s_rdd.onnx` (git-ignored), checks the size and the SHA-256, and deletes the file if the hash does not match. Set `FLOWSYNC_POTHOLE_MODEL` to use another path.
 
-## Behaviour
+## Behaviour (also when images come in through the device API)
 - Model installed: detections are labelled `camera_model`.
 - Not installed, or it fails to load or run: the old dark-patch heuristic runs and is labelled `camera_heuristic`. Image intake never fails because of the model.
 - Either way a detection is an **unreviewed** report: nothing changes routing or driver alerts until an operator verifies it.
