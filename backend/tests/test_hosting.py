@@ -126,3 +126,40 @@ def test_joinqr_main_rejects_a_url_without_a_scheme(monkeypatch):
     with pytest.raises(SystemExit) as e:
         joinqr.main()
     assert "http" in str(e.value)
+
+
+# ---- never public with development credentials ---------------------------------------------------------
+def _devices_file(tmp_path, key="k" * 24):
+    f = tmp_path / "devices.yaml"
+    f.write_text(f"devices:\n  simulator-1:\n    key: {key}\n    role: simulator\n", encoding="utf-8")
+    return str(f)
+
+
+def test_public_url_refuses_default_account_passwords(tmp_path, clock):
+    with pytest.raises(RuntimeError) as e:
+        make(tmp_path, clock, public_url="https://x.example", viewer_password="viewer-dev", devices_path=_devices_file(tmp_path))
+    assert "viewer" in str(e.value) and "viewer-dev" not in str(e.value) and "setup_demo" in str(e.value)
+
+
+def test_public_url_refuses_development_device_keys(tmp_path, clock):
+    with pytest.raises(RuntimeError) as e:
+        make(tmp_path, clock, public_url="https://x.example", viewer_password="v" * 20, admin_password="a" * 20,
+             devices_path=_devices_file(tmp_path, key="dev-simulator-1-change-me"))
+    assert "device keys: 1" in str(e.value) and "change-me" not in str(e.value)
+
+
+def test_public_url_starts_with_private_credentials(tmp_path, clock):
+    app = make(tmp_path, clock, public_url="https://x.example", viewer_password="v" * 20, admin_password="a" * 20,
+               devices_path=_devices_file(tmp_path))
+    assert TestClient(app).get("/api/health").status_code == 200
+
+
+def test_without_a_public_url_development_credentials_still_start(tmp_path, clock):
+    assert TestClient(make(tmp_path, clock, viewer_password="viewer-dev")).get("/api/health").status_code == 200
+
+
+def test_running_on_catalyst_refuses_development_credentials_even_without_a_public_url(tmp_path, clock, monkeypatch):
+    monkeypatch.setenv("X_ZOHO_CATALYST_LISTEN_PORT", "9000")
+    with pytest.raises(RuntimeError) as e:
+        make(tmp_path, clock, viewer_password="viewer-dev", devices_path=_devices_file(tmp_path))
+    assert "Catalyst" in str(e.value) and "viewer-dev" not in str(e.value)

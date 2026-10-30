@@ -1,4 +1,5 @@
 import asyncio
+import os
 import secrets
 import time
 from contextlib import asynccontextmanager
@@ -30,6 +31,7 @@ from .core.store import Store
 from .core.topology import Topology
 from .db import Database, now_iso
 from .deps import client_id
+from .health import default_credentials
 from .security import DeviceAuthenticator
 
 
@@ -77,6 +79,13 @@ class Context:
 def create_app(settings: Optional[Settings] = None, clock: Optional[Callable[[], float]] = None) -> FastAPI:
     settings = settings or Settings()
     ctx = Context(settings, clock)
+    hosted = bool(settings.public_url or os.getenv("X_ZOHO_CATALYST_LISTEN_PORT"))
+    if hosted:                                  # a public address or a Catalyst host means the open internet: never with development credentials
+        weak, keys = default_credentials(settings, ctx.device_specs)
+        if weak or keys:
+            raise RuntimeError("refusing to start on a public host (FLOWSYNC_PUBLIC_URL set or running on Catalyst) while development credentials are in use "
+                               f"(accounts: {', '.join(weak) or 'none'}; device keys: {len(keys)}). "
+                               "Create private ones with: python -m app.setup_demo")
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):

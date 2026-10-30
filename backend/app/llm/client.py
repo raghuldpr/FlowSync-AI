@@ -13,6 +13,7 @@ import httpx
 
 
 MAX_RETRY_WAIT_S = 12.0     # longest Retry-After we will wait out for a rate-limited request
+MIN_RETRY_S = 3.0           # and the retry must still have at least this long to complete inside the call's time budget
 
 
 class LLMError(Exception):
@@ -37,8 +38,9 @@ class LLMClient:
         host = urlparse(self.base_url).hostname if self.base_url else None
         return {"requested": self.requested, "enabled": self.enabled, "model": self.model or None, "provider_host": host}
 
-    def _post(self, c, body):
-        return c.post(self.base_url + "/chat/completions", json=body, headers={"Authorization": "Bearer " + self._key})
+    def _post(self, c, body, timeout=None):
+        return c.post(self.base_url + "/chat/completions", json=body, headers={"Authorization": "Bearer " + self._key},
+                      timeout=timeout if timeout is not None else httpx.USE_CLIENT_DEFAULT)
 
     def chat(self, messages: list, tools: Optional[list] = None, timeout: Optional[float] = None) -> dict:
         """Returns the first choice's message dict. Raises LLMError."""
@@ -49,14 +51,17 @@ class LLMClient:
         body = {"model": self.model, "messages": messages, "temperature": 0, "max_tokens": self.max_tokens}
         if tools:
             body["tools"], body["tool_choice"] = tools, "auto"
+        budget = timeout or self.timeout          # the whole call, retry included, must fit (a host cuts requests at 30 s)
+        start = time.monotonic()
         try:
-            with httpx.Client(timeout=timeout or self.timeout, transport=self._transport) as c:
+            with httpx.Client(timeout=budget, transport=self._transport) as c:
                 r = self._post(c, body)
                 if r.status_code == 429:
                     wait = _retry_after(r)
-                    if wait is not None and wait <= MAX_RETRY_WAIT_S:
+                    left = budget - (time.monotonic() - start)
+                    if wait is not None and wait <= MAX_RETRY_WAIT_S and wait + 0.5 + MIN_RETRY_S <= left:
                         time.sleep(wait + 0.5)
-                        r = self._post(c, body)
+                        r = self._post(c, body, timeout=max(MIN_RETRY_S, left - wait - 0.5))
         except httpx.TimeoutException:
             raise LLMError("timeout") from None
         except httpx.HTTPError:

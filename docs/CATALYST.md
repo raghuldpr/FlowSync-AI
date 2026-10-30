@@ -31,6 +31,7 @@ Sources: [AppSail basics](https://docs.catalyst.zoho.com/en/serverless/help/apps
 4. **No pothole weights and no OpenCV on the host.** The pothole layer on phones is simulated (operator-declared or scripted hazards) and works. Camera-image upload would fail on the host, and the boards are standalone, so nothing uses it.
 5. **The 30 s request limit.** The assistant waits up to `LLM_DEADLINE_S` (default 25 s). Set it to 20 on the host.
 6. **The development device keys are public** (they are in the repository). The build refuses to run without your private keys from `python -m app.setup_demo`. These keys are used only by the **simulator**, which posts to the hosted backend through the signed device API; no board uses them. `config/devices.yaml` itself is not changed.
+7. **The app refuses to start with development credentials on a public host.** If `FLOWSYNC_PUBLIC_URL` is set, or the app runs on Catalyst (it sees `X_ZOHO_CATALYST_LISTEN_PORT`), and any account password is still `operator-dev`, `viewer-dev` or `admin-dev`, or any device key still contains `change-me`, startup stops with a message that names the accounts (never the values). So the first start fails until the three passwords exist as environment variables (step 7). That is intended: it keeps the public copy from running with the public development passwords.
 
 ## Settings the code now understands
 
@@ -83,6 +84,8 @@ Note the service URL in the console (development first). Replace `FLOWSYNC_PUBLI
 
 **7. Environment variables, in the Catalyst console** (App Execution Settings or the service's Configuration). Values are per environment: set them for the environment you will use, and for production first do a production deploy.
 
+> **Order matters because of the startup check.** The first deploy may report the service as not started until the three `FLOWSYNC_*_PASSWORD` variables exist. Either set them in the console and then redeploy/restart, or put them under `env_variables` in `deploy\catalystppsailpp-config.json` before the first `catalyst deploy` (that folder is git-ignored and already holds your device keys). Do not paste them anywhere else.
+
 | Name | Value |
 |---|---|
 | `FLOWSYNC_VIEWER_PASSWORD`, `FLOWSYNC_OPERATOR_PASSWORD`, `FLOWSYNC_ADMIN_PASSWORD` | from your `.env` (never paste them in chat) |
@@ -120,6 +123,8 @@ python -m simulator.run_sim --url https://YOUR-SERVICE.catalystappsail.com --pas
 python -m simulator.guest_bots --base https://YOUR-SERVICE.catalystappsail.com --vehicles 5 --ambulance 1
 ```
 The simulator signs its calls with the device key in your local `.env`/devices file, which is the same file that went into the build. The old pages (`/presenter.html`, `/operator.html`, `/driver.html`) are served by the hosted backend. The 3D big screen (`web/`) is configured to proxy to `localhost:8000`; pointing it at the hosted address needs a one-line change in `web/vite.config.ts` (a configurable proxy target), **which this preparation did not make**.
+
+  To run the big screen against the hosted copy, set the API address before `npm run dev`: `$env:FLOWSYNC_API = "https://YOUR-SERVICE.catalystappsail.com"; cd web; npm run dev` (the dev server proxies `/api` there; without it, it uses `http://localhost:8000`).
 
 **11. Keep it warm.** While you wait for judging, ping it once a minute from the laptop:
 ```powershell

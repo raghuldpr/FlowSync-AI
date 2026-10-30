@@ -259,6 +259,33 @@ def test_rate_limit_that_persists_or_is_too_long_falls_back_without_the_key(monk
     assert len(calls) == (2 if retry_after == "3" else 1)               # one retry only, and none for a long wait
 
 
+def test_rate_limit_retry_is_skipped_when_it_would_not_fit_the_call_budget(monkeypatch):
+    from app.llm import client as client_mod
+    slept, calls = [], []
+    monkeypatch.setattr(client_mod.time, "sleep", lambda s: slept.append(s))
+
+    def handler(r):
+        calls.append(1)
+        return httpx.Response(429, headers={"retry-after": "10"}, text="limit")
+    c = LLMClient(settings(), httpx.MockTransport(handler))
+    with pytest.raises(LLMError) as e:
+        c.chat([{"role": "user", "content": "x"}], timeout=6.0)          # 10.5 s of waiting does not fit a 6 s budget
+    assert e.value.kind == "rate_limited" and len(calls) == 1 and slept == []
+
+
+def test_rate_limit_retry_waits_when_it_fits_the_budget(monkeypatch):
+    from app.llm import client as client_mod
+    slept, calls = [], []
+    monkeypatch.setattr(client_mod.time, "sleep", lambda s: slept.append(s))
+
+    def handler(r):
+        calls.append(1)
+        return httpx.Response(429, headers={"retry-after": "2"}, text="limit") if len(calls) == 1 else             httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+    c = LLMClient(settings(), httpx.MockTransport(handler))
+    assert c.chat([{"role": "user", "content": "x"}], timeout=15.0)["content"] == "ok"
+    assert len(calls) == 2 and slept == [2.5]
+
+
 def test_not_configured_client_is_disabled():
     for kw in (dict(llm_enabled=False), dict(llm_api_key=""), dict(llm_base_url=""), dict(llm_model="")):
         c = LLMClient(settings(**kw))

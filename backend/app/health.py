@@ -4,6 +4,14 @@ import os
 DEFAULT_OPERATOR_PASSWORDS = ("operator-dev", "viewer-dev", "admin-dev")
 
 
+def default_credentials(settings, device_specs) -> tuple:
+    """(accounts still on a development password, devices still on a development key). Names only, never the values."""
+    weak = [u for u, p in (("operator", settings.operator_password), ("viewer", settings.viewer_password),
+                           ("admin", settings.admin_password)) if p in DEFAULT_OPERATOR_PASSWORDS]
+    keys = [d for d, s in device_specs.items() if "change-me" in s["key"]]
+    return weak, keys
+
+
 def _c(name, status, detail):
     return {"name": name, "status": status, "detail": detail}        # status: ok | warn | fail
 
@@ -44,9 +52,7 @@ def report(ctx) -> dict:
     except OSError:
         checks.append(_c("image storage", "warn", "not writable; road-camera uploads would fail"))
 
-    weak = [u for u, p in (("operator", ctx.settings.operator_password), ("viewer", ctx.settings.viewer_password),
-                           ("admin", ctx.settings.admin_password)) if p in DEFAULT_OPERATOR_PASSWORDS]
-    keys = [d for d, s in ctx.device_specs.items() if "change-me" in s["key"]]
+    weak, keys = default_credentials(ctx.settings, ctx.device_specs)
     if weak or keys:
         checks.append(_c("credentials", "warn", f"development defaults in use (accounts: {', '.join(weak) or 'none'}; device keys: {len(keys)}). Change before an open demo (python -m app.setup_demo)"))
     else:
