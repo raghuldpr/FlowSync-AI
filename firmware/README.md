@@ -63,8 +63,7 @@ everything from the pins (GPIO 0, 2, 12, 15 especially), add 10 uF between EN an
 ---
 
 ## `intersection/` (backend-connected controller, kept for future work)
-Original notes follow. It still targets one ESP32 with 3x 74HCT595 (the earlier table design).
-
+It still targets one ESP32 with 3x 74HCT595 (the earlier table design).
 
 ```
 intersection/
@@ -80,22 +79,7 @@ intersection/
   test/host_tests.cpp  PC test driver used by backend/tests/test_firmware_core.py
 ```
 
-## Build and flash (needs PlatformIO)
-```
-cd firmware/intersection
-copy include\config.example.h include\config.h      # edit it
-pio run -e lamptest -t upload                       # bring-up: one LED at a time, no network
-pio run -e esp32dev -t upload ; pio device monitor
-```
-
-## Tests (no hardware, no ESP32 toolchain)
-`pip install -r requirements-dev.txt` (a small C++ compiler wheel), then `pytest backend/tests/test_firmware_core.py`:
-compiles the firmware core with `-Wall -Wextra -Werror` and checks it against the Python implementation —
-golden FSM traces (including 32-bit `millis()` wrap), signatures for every SHA-256 padding edge case, parsing of the real
-`/api/device/commands` payload, state/ack bodies accepted by the real endpoints, and the 595 bit-serial chain. Deliberately
-breaking the FSM, the HMAC or the shift order makes these tests fail.
-
-## What is and isn't verified
-* **Verified on a PC:** everything in `lib/flowsync_core`.
-* **Not compiled or run:** `src/main.cpp` (needs the ESP32 toolchain — see the PlatformIO note above), the watchdog behaviour, Wi-Fi/HTTP timing, and the electrical design.
-* **Not implemented:** intersection ultrasonic sensors (Tier 2), OTA updates, ESP-NOW (dropped by design: the backend is the control authority).
+Build: copy `include/config.example.h` to `include/config.h` (git-ignored), then `pio run -d firmware/intersection -e esp32dev` (or `-e lamptest`).
+Its core is tested by `pytest backend/tests/test_firmware_core.py`: golden FSM traces from the Python reference (including 32-bit `millis()` wrap),
+HMAC signatures for every SHA-256 padding edge case, parsing of the real `/api/device/commands` payload, and the 595 bit-serial chain.
+It compiles for the ESP32 but has never run on a board, and its 595 wiring is not the new table's wiring.
