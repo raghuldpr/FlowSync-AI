@@ -10,7 +10,7 @@ Rules that every item must keep: warnings use fixed lawful templates (the LLM ne
 |---|---|---|---|
 | H1 | Commit all work; README links resolve | doing | |
 | H2 | Bench-test every sensor on a breadboard (before the hackathon day) | todo | See `docs/HARDWARE_CAR_WIRING.md`, `firmware/car`, `firmware/camtest`, `lamptest` |
-| H3 | Test hotspot: laptop reachable from a second phone and an ESP32 (client isolation) | todo | `python -m app.joinqr` prints the address |
+| H3 | Test hotspot: laptop reachable from a second phone and an ESP32; count devices | todo | `docs/NETWORK_SETUP.md`; `python -m app.joinqr` prints the address |
 | H4 | Test the real LLM provider (Groq first) | todo | See `docs/LLM_SETUP.md` |
 | H5 | Physical table, camera calibration, ambulance marker | todo | On the day; see `docs/HARDWARE_RUNBOOK.md` |
 | H6 | Freeze features 2 hours before judging; rehearse with 6+ phones | todo | |
