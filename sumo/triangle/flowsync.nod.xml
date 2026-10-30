@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nodes>
+  <node id="ext_W" x="35.0" y="165.0" type="dead_end" />
+  <node id="ext_E" x="365.0" y="165.0" type="dead_end" />
+  <node id="ext_S" x="200.0" y="0.0" type="dead_end" />
+  <node id="I1" x="120.0" y="155.0" type="traffic_light" tl="I1" />
+  <node id="I2" x="280.0" y="155.0" type="traffic_light" tl="I2" />
+  <node id="I3" x="200.0" y="65.0" type="traffic_light" tl="I3" />
+</nodes>
