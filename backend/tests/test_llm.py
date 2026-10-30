@@ -180,6 +180,8 @@ def test_network_map_and_closure_impact_are_read_only(world):
     r = T.TOOLS["get_road_closure_impact"].handler(tc, {"road": "L13"})
     assert r["road"] == "L13" and r["affected_intersections"] and "worst_trips" in r
     assert set(world.store.all_closed()) == before                       # a what-if closes nothing
+    w1 = T.TOOLS["get_road_closure_impact"].handler(tc, {"road": "W1"})   # the only way in from ext_W
+    assert w1["unreachable_trips"] and "NO route" in w1["summary"]
     bad = T.TOOLS["get_road_closure_impact"].handler(tc, {"road": "nope"})
     assert "error" in bad and "L13" in bad["roads"]
     assert not T.TOOLS["get_network_map"].write and not T.TOOLS["get_road_closure_impact"].write

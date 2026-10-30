@@ -166,7 +166,13 @@ def get_road_closure_impact(tc, args):
         return {"error": "unknown road id; call get_network_map for the ids", "roads": list(t.edges)}
     imp = tc.ctx.incidents.impact("stalled_vehicle", road)
     pairs = sorted(imp["pairs"], key=lambda p: -(p["added_delay_s"] or 0))[:6]
-    return {"road": road, "affected_roads": imp["affected_edges"], "affected_intersections": imp["affected_intersections"],
+    n_unreach = len(imp["unreachable_pairs"])
+    summary = (f"Closing {road}: {imp['routes_affected']} entrance-to-entrance trips use it. "
+               + (f"{n_unreach} of them would have NO route at all ({', '.join(imp['unreachable_pairs'])}); "
+                  "added delay is only meaningful for the others. " if n_unreach else "All of them can reroute. ")
+               + f"Intersections affected: {', '.join(imp['affected_intersections']) or 'none'}; "
+               f"largest added delay for trips that can reroute: {imp['max_added_delay_s']} s.")
+    return {"summary": summary, "road": road, "affected_roads": imp["affected_edges"], "affected_intersections": imp["affected_intersections"],
             "trips_affected": imp["routes_affected"], "max_added_delay_s": imp["max_added_delay_s"],
             "unreachable_trips": imp["unreachable_pairs"], "worst_trips": pairs,
             "note": "Computed deterministically on current congestion; nothing was closed."}
