@@ -8,21 +8,31 @@ A connected traffic-intelligence prototype for several intersections, built for 
 - separate public / operator access, enforced and audit-logged on the backend;
 - an LLM that reasons over read tools and may *propose* one validated change, but never controls anything.
 
-The target demo is a physical three-intersection tabletop (ESP32 controller with a 74HCT595 LED chain, an overhead phone camera, a toy car carrying an ArUco marker as the ambulance, and a laptop running this backend). Every software path also runs against a simulator, so the whole system can be demonstrated, tested and measured without hardware.
+The demo has two separate parts that are deliberately **not linked** while testing:
+
+- **Software demo** (laptop + judges' phones): the backend, dashboards and a simulator. Judges scan a QR code and join as a guest, either as a **normal vehicle** or as an **ambulance driver**. An ambulance gets signal priority and a route, and can raise a **simulated V2V** emergency alert that reaches only the relevant nearby vehicles. A separate **SUMO** view shows FlowSync against fixed-time signals.
+- **Hardware demo** (three standalone prototypes that show how it would look in real life): a tabletop with 3 intersections on 2 ESP32 DevKits and 6 traffic modules, a connected-car "brain" (ESP32 + sensors, LCD, buzzer), and an ESP32-CAM. None of them needs Wi-Fi or the backend. There is no camera, ArUco marker or toy car on the table.
+
+Every software path runs against a simulator, so the whole system can be demonstrated, tested and measured without hardware.
 
 ## Honest status
 
 | Part | State |
 |---|---|
-| Backend, controller, EV corridor, routing, incidents, road-user alerts, hazards, roles, audit, retention, health, metrics, replay | built and covered by automated tests (373 pass) |
-| Operator / presenter / phone dashboards | built, served by the backend |
-| ESP32 firmware (`intersection`, `lamptest`, `roadcam`) | compiles for the real targets and passes host-side tests against Python golden traces; **not flashed or wired** |
-| Camera vision (ROI counting, ArUco EV tracking) | verified on a **synthetic** camera only |
+| Backend, controller, EV corridor, routing, incidents, road-user alerts, hazards, roles, audit, retention, health, metrics, replay | built and covered by automated tests |
+| Guest join with roles (vehicle / ambulance), guest ambulance trip, **simulated** V2V emergency alert, trip receipt | built and tested ([docs/GUEST_API.md](docs/GUEST_API.md)); V2V is simulated in the backend, no radio is involved |
+| Operator / presenter / phone dashboards (`dashboard/`) | built, served by the backend |
+| 3D big-screen dashboard (`web/`) | built; showing the guests' cars on its map is in progress (see [docs/WOW_FACTORS.md](docs/WOW_FACTORS.md)) |
+| SUMO evidence view (`sumosim/`) | built; separate from the live phone demo; results are **simulated** ([docs/RESULTS_SUMO.md](docs/RESULTS_SUMO.md)) |
+| Standalone hardware firmware (`firmware/table`, `firmware/car`, `firmware/camtest`) | compiles and its logic passes host tests; **not yet flashed or bench-tested on a board** |
+| Backend-connected intersection firmware (`firmware/intersection`, 74HCT595 design) and `roadcam` | kept as future work; compiles and passes host tests against Python golden traces; **not flashed or wired** |
+| Pothole detection | pretrained model (see [docs/POTHOLE_MODEL.md](docs/POTHOLE_MODEL.md)); **the weights are not downloaded or pinned yet**, so the old dark-patch heuristic runs until they are; not measured on our camera |
+| Camera vision (ROI counting, ArUco EV tracking) | verified on a **synthetic** camera only; not part of the table demo |
 | LLM layer | tested against a stand-in model; deterministic fallback is always available |
-| Measured benefits ([docs/RESULTS.md](docs/RESULTS.md)) | **simulated**: outcomes of our own traffic and driver models, not predictions for a real road |
+| Measured benefits ([docs/RESULTS.md](docs/RESULTS.md), [docs/RESULTS_SUMO.md](docs/RESULTS_SUMO.md)) | **simulated**: outcomes of our own traffic and driver models, not predictions for a real road |
 | Credentials | development defaults; change them before any real demo (the health check warns) |
 
-What remains is physical (wiring, flashing, table, camera calibration, rehearsal): see [docs/HARDWARE_RUNBOOK.md](docs/HARDWARE_RUNBOOK.md). What is real and what is simulated is also generated live in the dashboard's *Built vs simulated* tab and described in [docs/BUILT_VS_SIMULATED.md](docs/BUILT_VS_SIMULATED.md).
+What remains is physical (flashing and bench-testing the three prototypes, building the table) plus rehearsal: see [docs/HARDWARE_RUNBOOK.md](docs/HARDWARE_RUNBOOK.md) and [docs/NETWORK_SETUP.md](docs/NETWORK_SETUP.md). What is real and what is simulated is also generated live in the dashboard's *Built vs simulated* tab and described in [docs/BUILT_VS_SIMULATED.md](docs/BUILT_VS_SIMULATED.md).
 
 ## Measured results (simulated, 8 seeds, mean ± sd)
 
@@ -37,6 +47,10 @@ Full tables, method and caveats: [docs/RESULTS.md](docs/RESULTS.md).
 | Signal delay, one heavy entrance | 14.0 ± 1.6 s | 9.0 ± 1.2 s | 35 % ± 13 |
 
 Where the system does **not** show a benefit in our model, and we say so: rerouting around a moderate jam (-10 % ± 15), the free-flowing ambulance trip (2 % ± 5), adaptive signals with three heavy entrances (1 % ± 14), and adaptive signals on the balanced city grid (6 % ± 8). A saving whose spread is as large as its mean is not evidence.
+
+### SUMO view (simulated, 5 seeds)
+
+SUMO's driver model supplies the vehicles; our real controller sets the lights ([docs/RESULTS_SUMO.md](docs/RESULTS_SUMO.md)). Mean waiting time per vehicle is about halved against fixed-time signals: 3.6 s vs 7.7 s under balanced demand, and 4.1 s vs 7.8 s under a rush from the West. The ambulance with FlowSync never stops (0 s vs 8 s stopped for the baseline), but its **trip is not shorter**: 71.2 ± 7.0 s vs 69.4 ± 1.3 s, because the baseline overtakes the jam in the second lane and FlowSync takes a longer detour.
 
 ## Quick start (Windows PowerShell)
 
@@ -79,9 +93,10 @@ Before a phone-hotspot demo, print the join links and a QR sheet for the laptop'
 |---|---|
 | `/operator.html` | operators: Scenario, Road conditions, Assistant, Replay, Built-vs-simulated, alerts, audit |
 | `/presenter.html` | full-screen narration with live ✓/✗ self-checks |
-| `/driver.html` | phones: join as a road user, see only alerts relevant to your route |
+| `/driver.html` | phones: join as a guest (pick **vehicle** or **ambulance**), see only alerts relevant to your route; `?gate=ext_W` etc. is what the per-gate QR codes use |
 | `/public.html?approach=L12` | public per-approach warning view |
 | `/index.html` | overview map |
+| `web/` (`npm run dev` in `web/`, http://localhost:5173) | 3D big-screen dashboard; signs in as an operator and polls the backend; proxies `/api` to `localhost:8000` |
 
 ### Run modes
 
@@ -89,13 +104,14 @@ Before a phone-hotspot demo, print the join links and a QR sheet for the laptop'
 |---|---|
 | Fully simulated | backend + `python -m simulator.run_sim` |
 | Simulated with a synthetic camera | `python -m simulator.run_sim --demo --vision` (needs `requirements-vision.txt`) |
-| Physical table | backend + `python -m app.vision.run ...` + a flashed controller; the Scenario panel then shows what a person must do at each step |
+| SUMO evidence view | `pip install -r requirements-sumo.txt`, then `python -m sumosim.run_sumo --gui --demo` with the backend running; `python -m sumosim.compare --seeds 5` writes `docs/RESULTS_SUMO.md` ([sumosim/README.md](sumosim/README.md)) |
+| Hardware prototypes | standalone, not connected to the backend: [docs/HARDWARE_RUNBOOK.md](docs/HARDWARE_RUNBOOK.md) |
 | City (12 intersections, simulated) | `python -m app.gridgen`, then start backend and simulator with `FLOWSYNC_TOPOLOGY_PATH=config/topology.grid.yaml` and `FLOWSYNC_DEVICES_PATH=config/devices.grid.yaml`, and run the `city_demo` scenario |
 
 ## Tests and results
 
 ```powershell
-.\.venv\Scripts\python -m pytest -q                  # 373 tests, about 8 minutes
+.\.venv\Scripts\python -m pytest -q                  # the full suite takes about 10 to 15 minutes
 .\.venv\Scripts\python -m pip install -r requirements-dev.txt      # firmware host tests (C++ core vs Python golden traces)
 .\.venv\Scripts\python -m pip install -r requirements-vision.txt   # vision tests (OpenCV, numpy); otherwise they skip
 .\.venv\Scripts\python -m simulator.evaluate --seeds 8 --city      # regenerate docs/RESULTS.md and dashboard/results.json (about 6 minutes)
@@ -135,31 +151,38 @@ backend/app/      FastAPI app: api/ (public, device, operator, llm, roadusers, h
 backend/tests/    automated tests
 config/           topology.yaml, devices.yaml (+ generated city grid files)
 dashboard/        operator, presenter, phone driver, public and overview pages
+web/              3D big-screen dashboard (React, Vite, React Three Fiber)
 simulator/        virtual tabletop (run_sim.py, tabletop.py), vision_world.py, evaluate.py (A/B experiments)
-firmware/         intersection controller, lamp test, ESP32-CAM road camera, timing-header generator
+sumosim/          SUMO road-traffic view: network from topology.yaml, bridge to the backend, comparison
+firmware/         table (standalone 2-ESP32 demo), car (standalone car brain), camtest (standalone ESP32-CAM),
+                  intersection (backend-connected controller, future work), roadcam, timing-header generator
 docs/             plans, specs, runbooks, demo script, results
 ```
 
 ## Documentation
 
-[Demo script](docs/DEMO_SCRIPT.md) · [Built vs simulated](docs/BUILT_VS_SIMULATED.md) · [Measured results](docs/RESULTS.md) · [Implementation plan](docs/IMPLEMENTATION_PLAN.md) · [Hardware spec v2](docs/HARDWARE_SPEC_v2.md) · [Software spec v2](docs/SOFTWARE_SPEC_v2.md) · [Wiring](docs/HARDWARE_WIRING.md) · [Vision setup](docs/VISION_SETUP.md) · [Hardware runbook](docs/HARDWARE_RUNBOOK.md) · [Car wiring](docs/HARDWARE_CAR_WIRING.md) · [Frontend spec](docs/FRONTEND_SPEC.md) · [Pitch outline](docs/PITCH_OUTLINE.md) · [Wow-factor tracker](docs/WOW_FACTORS.md) · [LLM setup](docs/LLM_SETUP.md)
+[Demo script](docs/DEMO_SCRIPT.md) · [Built vs simulated](docs/BUILT_VS_SIMULATED.md) · [Measured results](docs/RESULTS.md) · [Implementation plan](docs/IMPLEMENTATION_PLAN.md) · [Hardware spec v2](docs/HARDWARE_SPEC_v2.md) · [Software spec v2](docs/SOFTWARE_SPEC_v2.md) · [Wiring](docs/HARDWARE_WIRING.md) · [Vision setup](docs/VISION_SETUP.md) · [Hardware runbook](docs/HARDWARE_RUNBOOK.md) · [Car wiring](docs/HARDWARE_CAR_WIRING.md) · [Frontend spec](docs/FRONTEND_SPEC.md) · [Pitch outline](docs/PITCH_OUTLINE.md) · [Wow-factor tracker](docs/WOW_FACTORS.md) · [LLM setup](docs/LLM_SETUP.md) · [Network setup](docs/NETWORK_SETUP.md) · [Guest, ambulance and V2V API](docs/GUEST_API.md) · [V2V message mapping](docs/V2V_MESSAGES.md) · [Pothole model](docs/POTHOLE_MODEL.md) · [SUMO](docs/SUMO.md) · [SUMO results](docs/RESULTS_SUMO.md)
 
 ## Building the firmware
 
-PlatformIO environments: `esp32dev` (intersection controller), `lamptest`, and `esp32cam` (road camera). Copy `config.example.h` to `config.h` in the firmware project's `include/`, fill in Wi-Fi and the laptop address (printed by the preflight check), then:
+The hardware demo is three standalone PlatformIO projects. Wiring: [docs/HARDWARE_WIRING.md](docs/HARDWARE_WIRING.md) (table), [docs/HARDWARE_CAR_WIRING.md](docs/HARDWARE_CAR_WIRING.md) (car). Flash order, expected serial output and pass criteria for each gate: [docs/HARDWARE_RUNBOOK.md](docs/HARDWARE_RUNBOOK.md). Overview: [firmware/README.md](firmware/README.md).
 
 ```powershell
-.\.venv\Scripts\python -m platformio run -d firmware/intersection -e esp32dev
-.\.venv\Scripts\python -m platformio run -d firmware/intersection -e esp32dev -t upload
+.\.venv\Scripts\python -m platformio run -d firmware/table -e board1 -t upload     # tabletop, first ESP32 (board2 for the second)
+.\.venv\Scripts\python -m platformio run -d firmware/car -e car -t upload          # car brain
+.\.venv\Scripts\python -m platformio run -d firmware/camtest -e camweb -t upload   # ESP32-CAM
 ```
 
-Wiring: [docs/HARDWARE_WIRING.md](docs/HARDWARE_WIRING.md). Vision and table calibration: [docs/VISION_SETUP.md](docs/VISION_SETUP.md).
+The backend-connected intersection controller (`firmware/intersection`, `esp32dev` and `lamptest`) targets the older one-ESP32 + 74HCT595 design and needs `config.h` (copied from `config.example.h`, git-ignored). It is kept as future work.
 
 ## Known limitations
 
-- The firmware has not run on hardware; vision accuracy on a real table is unmeasured.
+- No firmware has run on a board yet (all of it compiles; the table, car and camera logic has host tests). The pothole model is untested on our camera, and its weights are not yet downloaded or hash-pinned.
+- V2V is simulated in the backend (no radio). Judges' phones drive a **virtual** car (dead reckoning, no GPS).
+- The Windows Mobile Hotspot is believed to allow about 8 clients; the real limit has not been measured (see [docs/NETWORK_SETUP.md](docs/NETWORK_SETUP.md)).
 - On the physical table lane capacities are 2-6 vehicles, so the default congestion rule (75 % full for 10 s) can fire at 2 of 3 cars on short lanes; tune `incidents:` in `config/topology.yaml`.
 - Adaptive signals show no measured advantage under three simultaneous heavy entrances or on the balanced city grid; a parameter sweep (`control.switch_margin`, `timing.min_green_ms`) was started but not completed.
+- In SUMO the ambulance never stops with FlowSync, but its trip is not shorter than the baseline's (71.2 vs 69.4 s).
 - Rerouting around a moderate jam does not help the ambulance in our model; it helps around a blocked road.
 - Public POST endpoints (road-user join, hazard reports) are rate limited per IP and token, but the system has no CAPTCHA or account system for the public.
 - The simulator test client opens one event loop per world. Do not revert that: on Windows a loop per request exhausts ephemeral ports and long evaluations hang.
