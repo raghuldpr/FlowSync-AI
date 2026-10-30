@@ -8,7 +8,8 @@
   The keys `catalyst init` wrote (build_path, stack, scripts) are kept; command, memory and env_variables are replaced.
   The file is git-ignored (deploy\catalyst\.gitignore) because it holds your passwords: do not commit or share it. It goes to
   YOUR Catalyst account with the deploy, as do your private device keys. Run this again if init replaced the file.
-  The LLM settings are NOT written here: set LLM_* in the Catalyst console (the key stays out of files).
+  The LLM settings are written only with -IncludeLlm (the key then sits in this git-ignored file). Without it, set LLM_* in the
+  Catalyst console, but note that a later `catalyst deploy` can replace console values with the ones in this file.
   FLOWSYNC_PUBLIC_URL is written only when you pass -PublicUrl (you know the service address after the first deploy).
 
 .EXAMPLE
@@ -16,7 +17,10 @@
   .\deploy\catalyst\write-config.ps1 -PublicUrl https://flowsync-123.development.catalystappsail.in
 #>
 [CmdletBinding()]
-param([string]$PublicUrl = '')       # the service address, e.g. https://name-id.development.catalystappsail.in (no trailing slash)
+param(
+  [string]$PublicUrl = '',           # the service address, e.g. https://name-id.development.catalystappsail.in (no trailing slash)
+  [switch]$IncludeLlm                # also copy LLM_ENABLED, LLM_BASE_URL, LLM_MODEL and LLM_API_KEY from .env (the key goes into this git-ignored file)
+)
 $ErrorActionPreference = 'Stop'
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $Dir  = Join-Path $PSScriptRoot 'appsail'
@@ -49,6 +53,13 @@ foreach ($n in $names) { $envVars[$n] = $vals[$n] }
 if ($PublicUrl) {
   if ($PublicUrl -notmatch '^https://[^/\s]+$') { throw 'PublicUrl must look like https://host (https, no path, no trailing slash).' }
   $envVars['FLOWSYNC_PUBLIC_URL'] = $PublicUrl
+}
+
+if ($IncludeLlm) {
+  foreach ($n in 'LLM_ENABLED', 'LLM_BASE_URL', 'LLM_MODEL', 'LLM_API_KEY') {
+    if (-not $vals[$n]) { throw "$n is missing or empty in .env (see docs\LLM_SETUP.md)." }
+    $envVars[$n] = $vals[$n]
+  }
 }
 
 $cfg | Add-Member -NotePropertyName command -NotePropertyValue $example.command -Force
