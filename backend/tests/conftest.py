@@ -7,6 +7,12 @@ from app.main import create_app
 PW = "test-operator-pw"
 
 
+@pytest.fixture(autouse=True)
+def no_pothole_weights(monkeypatch, tmp_path):
+    """Tests must not depend on whether the (git-ignored) pothole weights are installed; model tests install a fake themselves."""
+    monkeypatch.setenv("FLOWSYNC_POTHOLE_MODEL", str(tmp_path / "no-weights.onnx"))
+
+
 @pytest.fixture
 def clock():
     t = [0.0]
