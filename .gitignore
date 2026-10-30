@@ -13,3 +13,4 @@ __pycache__/
 .pytest_cache/
 sumosim/net/
 compare.log
+models/

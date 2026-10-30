@@ -1,6 +1,11 @@
-"""Pothole / dark-patch candidate finder for road-camera images.
+"""Pothole finder for road-camera images (ESP32-CAM JPEGs posted to /api/device/images).
 
-HONEST LABEL: this is a classical-vision HEURISTIC (a compact dark region, clearly darker than the surrounding road, of
+Two detectors, always labelled by which one ran:
+  * `camera_model`     - a PRETRAINED YOLOv8s road-damage model (see pothole_model.py and docs/POTHOLE_MODEL.md), run on the laptop.
+  * `camera_heuristic` - the classical dark-patch finder below, used when the model file is not installed or fails.
+Either way every detection becomes an UNREVIEWED report: an operator must verify it before it can affect routing.
+
+The heuristic: this is a classical-vision HEURISTIC (a compact dark region, clearly darker than the surrounding road, of
 plausible size and shape). It is meant for the tabletop (printed pothole props) and for flagging candidates for a human.
 It is not a trained model, and every detection becomes an unreviewed report: an operator must verify it before it can
 affect routing. Shadows, oil stains and dark vehicles will fool it.
@@ -14,6 +19,23 @@ MIN_SOLIDITY = 0.80
 
 
 def detect(img_bgr) -> list:
+    """Detections with the model if installed, else the heuristic. Use detect_labelled() when the caller needs to know which."""
+    return detect_labelled(img_bgr)[0]
+
+
+def detect_labelled(img_bgr) -> tuple:
+    """(detections, source) where source is 'camera_model' or 'camera_heuristic'."""
+    from . import pothole_model
+    model = pothole_model.get()
+    if model is not None:
+        try:
+            return model.detect(img_bgr), "camera_model"
+        except Exception:                                    # a broken model must never stop image intake: fall back, still labelled
+            pass
+    return detect_heuristic(img_bgr), "camera_heuristic"
+
+
+def detect_heuristic(img_bgr) -> list:
     gray = cv2.GaussianBlur(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY), (7, 7), 0)
     h, w = gray.shape
     med = float(np.median(gray))
