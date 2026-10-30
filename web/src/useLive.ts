@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { ApiError, api } from './api'
-import { flowPoint, type ApiIncident, type Overview, type Topo } from './live'
+import { flowPoint, type ApiIncident, type Feed, type Overview, type Topo } from './live'
 import { useStore } from './store'
 
 interface Decision { reason: string }
@@ -18,7 +18,11 @@ export function useLivePoller() {
       const st = useStore.getState()
       try {
         const topo = st.live.topo ?? (await api<Topo>('GET', '/api/public/topology'))
-        const ov = await api<Overview>('GET', '/api/operator/overview', token)
+        const [ov, feed] = await Promise.all([
+          api<Overview>('GET', '/api/operator/overview', token),
+          // The guest feed is an extra: if it fails the overview still draws every car.
+          api<Feed>('GET', '/api/operator/road-users/feed', token).catch(() => null),
+        ])
         const extra: { priority?: number; incidents?: ApiIncident[] } = {}
         if (n % 3 === 0) {
           const [dec, inc] = await Promise.all([
@@ -32,7 +36,10 @@ export function useLivePoller() {
         if (!alive) return
         const now = Date.now()
         const flow = [...useStore.getState().live.flow, flowPoint(ov, topo, now)].filter((p) => p.t > now - 3_600_000).slice(-3600)
-        useStore.getState().setLive({ topo, ov, ok: true, err: null, updated: now, flow, ...extra })
+        const prev = useStore.getState().live, first = prev.ov === null
+        let born = prev.born
+        for (const u of ov.road_users) if (!(u.id in born)) born = { ...born, [u.id]: first ? 0 : now }
+        useStore.getState().setLive({ topo, ov, feed, born, ok: true, err: null, updated: now, flow, ...extra })
       } catch (e) {
         if (!alive) return
         if (e instanceof ApiError && e.status === 401) useStore.getState().setAuth(null)
