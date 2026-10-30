@@ -11,15 +11,19 @@
   .card { border: 2px solid var(--line); border-radius: 14px; padding: 14px 16px; margin: 10px 0; background: var(--panel); }
   .card .t { font-size: 18px; line-height: 1.35; }
   .card.ev { border-color: var(--bad); }
-  .card.ev.live .t { font-size: 22px; font-weight: 600; }
+  .card.ev.live .t { font-weight: 600; }
   .card.warn { border-color: var(--warn); }
   .card.info { border-color: var(--accent); }
   .card.done { border-color: var(--ok); }
   .card.gone { opacity: .75; }
   .tag { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
   label { display: block; margin: 10px 0 4px; color: var(--muted); }
-  select, button.big { width: 100%; padding: 12px; font-size: 17px; }
+  select, button.big { width: 100%; padding: 12px; font-size: 17px; min-height: 48px; }
   button.big { margin-top: 14px; }
+  button.ghost#leave { min-height: 44px; min-width: 76px; font-size: 16px; }
+  #net { display: none; margin: 8px 0; padding: 10px 14px; border-radius: 10px; background: var(--warn); color: #fff; font-size: 15px; }
+  #net.on { display: block; }
+  .card.ev.live .t { font-size: 19px; }
   button.role { width: 100%; text-align: left; padding: 16px; margin-top: 12px; font-size: 18px; border-radius: 14px; }
   button.role small { display: block; font-weight: 400; opacity: .9; margin-top: 2px; font-size: 14px; }
   button.role.amb { background: var(--bad); }
@@ -36,7 +40,9 @@
     background: radial-gradient(circle at 50% 30%, #b3202a 0%, #4a0f18 100%); animation: pulse 1s ease-in-out infinite alternate; }
   #takeover.on { display: flex; }
   #takeover .big { font-size: 28px; font-weight: 700; line-height: 1.25; }
-  #takeover .arrow { font-size: 64px; margin: 10px 0; }
+  #takeover .siren { width: 76px; height: 76px; margin: 10px auto; border-radius: 50%; border: 5px solid #fff; font-size: 48px; font-weight: 800; line-height: 66px; }
+  #takeover .simpill { display: inline-block; margin: 0 auto 6px; padding: 3px 14px; border-radius: 999px; background: #fff; color: #7a1018; font-size: 14px; font-weight: 700; letter-spacing: .08em; }
+  #takeover button.hide { margin: 18px auto 0; min-height: 48px; padding: 10px 28px; font-size: 17px; background: rgba(255,255,255,.18); border: 2px solid rgba(255,255,255,.7); color: #fff; border-radius: 12px; }
   #takeover .eta { display: inline-block; margin: 12px auto; padding: 6px 16px; border-radius: 999px; background: rgba(255,255,255,.2); font-size: 20px; }
   #takeover .fine { font-size: 14px; opacity: .85; margin-top: 18px; }
   @keyframes pulse { from { box-shadow: inset 0 0 60px 10px rgba(255, 60, 60, .5); } to { box-shadow: inset 0 0 90px 24px rgba(60, 110, 255, .55); } }
@@ -68,7 +74,7 @@
 <section id="live" hidden>
   <div class="row2"><b><span class="dot" id="dot"></span><span id="me"></span></b><span id="status" class="chip"></span><button class="ghost" id="leave">Leave</button></div>
   <div class="muted" id="trip"></div>
-  <div class="card"><svg id="map" viewBox="0 0 800 520" role="img" aria-label="Map showing your car"></svg><div class="muted" id="route"></div></div>
+  <div id="net" role="status">Connection lost. Trying again…</div>
   <div id="ambulance" class="card amb-panel" hidden>
     <div class="row2"><b>Ambulance trip</b><span class="sim">simulated</span></div>
     <div class="kv"><span>Estimated time left</span><b id="a-eta">–</b></div>
@@ -77,16 +83,19 @@
     <button class="alert" id="alert">Raise emergency alert</button>
     <div class="muted" id="alert-note" style="margin-top:6px;font-size:13px">Sends a <b>simulated</b> V2V message to nearby cars. Only cars on your route ahead of you are alerted.</div>
   </div>
-  <div id="alerts" aria-live="assertive"></div>
   <div id="receipt" class="card done" hidden></div>
+  <div class="card"><svg id="map" viewBox="40 100 720 440" role="img" aria-label="Map showing your car"></svg><div class="muted" id="route"></div></div>
+  <div id="alerts" aria-live="assertive"></div>
 </section>
 
 <div id="takeover" role="alertdialog" aria-live="assertive">
+  <div><span class="simpill">SIMULATED</span></div>
   <div class="tag" style="color:#fff;opacity:.85" id="to-tag">Emergency vehicle</div>
-  <div class="arrow" id="to-arrow">↑</div>
+  <div class="siren" aria-hidden="true">!</div>
   <div class="big" id="to-text"></div>
   <div><span class="eta" id="to-eta"></span></div>
-  <div class="fine">This is a simulated demo alert. Make way only when it is safe and lawful to do so.</div>
+  <div class="fine">Demo alert from the simulation. It does not mean a real emergency vehicle is near you.</div>
+  <button class="hide" id="to-hide">Hide</button>
 </div>
 <div id="toast" role="status"></div>
 
