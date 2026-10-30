@@ -2,3 +2,5 @@
 appsail/
 .catalystrc
 catalyst.json
+# Holds your passwords after write-config.ps1 has run; the template to commit is app-config.example.json
+/app-config.json

@@ -1,13 +1,14 @@
 <#
 .SYNOPSIS
-  Write deploy\catalyst\appsail\app-config.json: the startup command and memory from app-config.example.json, plus the three
-  account passwords from your .env (made by `python -m app.setup_demo`), so the first start passes the "no development
-  credentials on a public host" check. Nothing secret is printed.
+  Fill deploy\catalyst\app-config.json (the file `catalyst init` creates next to catalyst.json): the startup command and memory
+  from app-config.example.json, plus the three account passwords from your .env (made by `python -m app.setup_demo`), so the
+  first start passes the "no development credentials on a public host" check. Nothing secret is printed.
 
 .DESCRIPTION
-  appsail\ is git-ignored and is uploaded to YOUR Catalyst account together with your private device keys, so the passwords
-  are no more exposed there than those keys. Do not commit or share the file. Run this again after `catalyst init` if init
-  replaced the file. The LLM settings are NOT written here: set LLM_* in the Catalyst console (the key stays out of files).
+  The keys `catalyst init` wrote (build_path, stack, scripts) are kept; command, memory and env_variables are replaced.
+  The file is git-ignored (deploy\catalyst\.gitignore) because it holds your passwords: do not commit or share it. It goes to
+  YOUR Catalyst account with the deploy, as do your private device keys. Run this again if init replaced the file.
+  The LLM settings are NOT written here: set LLM_* in the Catalyst console (the key stays out of files).
   FLOWSYNC_PUBLIC_URL is not written either: set it in the console once you know the service address.
 
 .EXAMPLE
@@ -17,6 +18,9 @@ $ErrorActionPreference = 'Stop'
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $Dir  = Join-Path $PSScriptRoot 'appsail'
 if (-not (Test-Path $Dir)) { throw "Run .\deploy\catalyst\build.ps1 first (it creates $Dir)." }
+$out = Join-Path $PSScriptRoot 'app-config.json'
+if (-not (Test-Path $out)) { throw "No $out. Run 'catalyst init' in deploy\catalyst first; it creates this file." }
+$cfg = Get-Content $out -Raw -Encoding UTF8 | ConvertFrom-Json
 
 $envFile = Join-Path $Root '.env'
 if (-not (Test-Path $envFile)) { throw "No .env. Run 'python -m app.setup_demo' first." }
@@ -40,9 +44,15 @@ foreach ($p in $example.env_variables.PSObject.Properties) {
 }
 foreach ($n in $names) { $envVars[$n] = $vals[$n] }
 
-$cfg = [ordered]@{ command = $example.command; memory = $example.memory; env_variables = $envVars }
-$out = Join-Path $Dir 'app-config.json'
-[System.IO.File]::WriteAllText($out, ($cfg | ConvertTo-Json -Depth 5), (New-Object System.Text.UTF8Encoding($false)))
+$cfg | Add-Member -NotePropertyName command -NotePropertyValue $example.command -Force
+$cfg | Add-Member -NotePropertyName memory -NotePropertyValue $example.memory -Force
+$cfg | Add-Member -NotePropertyName env_variables -NotePropertyValue ([pscustomobject]$envVars) -Force
+[System.IO.File]::WriteAllText($out, ($cfg | ConvertTo-Json -Depth 6), (New-Object System.Text.UTF8Encoding($false)))
+
+# An earlier version of this script wrote a copy inside appsail\ (it would be uploaded with the code); the CLI does not read it.
+$stray = Join-Path $Dir 'app-config.json'
+if (Test-Path $stray) { Remove-Item $stray -Force }
+
 Write-Host "Wrote $out"
-Write-Host ("  command, memory {0} MB, {1} environment variables: {2}" -f $cfg.memory, $envVars.Count, ($envVars.Keys -join ', '))
+Write-Host ("  keys: {0}; memory {1} MB; {2} environment variables: {3}" -f (($cfg.PSObject.Properties.Name) -join ', '), $cfg.memory, $envVars.Count, ($envVars.Keys -join ', '))
 Write-Host "  (values not shown; the file is git-ignored; do not commit or share it)"
