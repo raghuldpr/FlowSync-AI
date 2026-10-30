@@ -20,6 +20,9 @@ TEMPLATES = {
     "route_closed": "Your route changed because the road ahead is closed. New route: {route}.",
     "hazard_ahead": "Road hazard ahead on {road}: {what}. Drive with extra care.",
     "hazard_cleared": "The road hazard on {road} has been cleared.",
+    # simulated vehicle-to-vehicle broadcast raised by a guest ambulance driver (labelled simulated in every view)
+    "v2v_emergency": "Emergency vehicle alert from a nearby ambulance (simulated V2V message), coming from {origin}. Make way only when it is safe and lawful to do so.",
+    "v2v_ended": "The nearby emergency vehicle alert has ended. Continue as normal, following road signs and signals.",
 }
 
 # Review aid: phrases that must never appear in driver-facing text.

@@ -19,11 +19,11 @@ Rules that every item must keep: warnings use fixed lawful templates (the LLM ne
 
 | Order | Wow factor | Difficulty | Judge impact | Status | Done when |
 |---|---|---|---|---|---|
-| 1 | **Join by QR**: scan, get a car (colour, plate), tap "Start driving". No form. Per-gate QR codes. | Medium | Very high | todo (QR sheet done; page not) | A phone joins in under 10 s and gets a car |
-| 2 | **Judges appear on the big screen** with name, colour and a ripple on join | Medium | Very high | todo | Joining on a phone shows a car on the presenter map |
-| 3 | **Selective warning wave**: full-screen takeover (red/blue glow, siren, direction arrow, ETA band, fixed text) only on relevant phones; big screen shows who was and was not warned | Medium | Very high | todo | With 5 phones, only the ones on the corridor alert |
-| 4 | **Live route change** on phones: "no longer approaching you", another phone lights up, then "ambulance has passed" | Easy to medium | High | todo | Triggered by the incident step in the scenario |
-| 5 | **Trip receipt**: time, "you made way for 1 ambulance", "your session and location were deleted" | Easy | Medium | todo | Shown at arrival; the data really is deleted |
+| 1 | **Join by QR**: scan, get a car (colour, plate), tap "Start driving". No form. Per-gate QR codes. | Medium | Very high | done (guest role picker, `?gate=`) | A phone joins in under 10 s and gets a car |
+| 2 | **Judges appear on the big screen** with name, colour and a ripple on join | Medium | Very high | doing (backend feed `/api/operator/road-users/feed` and presenter panel done; 3D map in `web/` pending) | Joining on a phone shows a car on the presenter map |
+| 3 | **Selective warning wave**: full-screen takeover (red/blue glow, siren, direction arrow, ETA band, fixed text) only on relevant phones; big screen shows who was and was not warned | Medium | Very high | done (takeover screen; simulated V2V alert from a guest ambulance) | With 5 phones, only the ones on the corridor alert |
+| 4 | **Live route change** on phones: "no longer approaching you", another phone lights up, then "ambulance has passed" | Easy to medium | High | done (toast with the fixed wording when an alert ends) | Triggered by the incident step in the scenario |
+| 5 | **Trip receipt**: time, "you made way for 1 ambulance", "your session and location were deleted" | Easy | Medium | done | Shown at arrival; the data really is deleted |
 | 6 | **Ghost ambulance**: shadow run with fixed-time signals and no warnings, side by side, live "seconds saved" | Medium | High | todo | Presenter shows both runs and the counter |
 | 7 | **Hash-chained audit log** with an admin "verify chain" button | Easy | Medium | todo | Editing a row makes verification fail |
 | 8 | **Visible LLM tool-call trace** (question, tool, result, proposal, validator verdict) | Medium | High | todo | Operator page shows the chain live |

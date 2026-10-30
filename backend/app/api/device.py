@@ -138,7 +138,7 @@ class ImageIn(BaseModel):
 
 @router.post("/images")
 def post_image(call: DeviceCall = Depends(device_call), ctx=Depends(get_ctx)):
-    """Road-camera frame (ESP32-CAM). Stored under a server-generated name; the heuristic detector may raise an UNREVIEWED hazard report."""
+    """Road-camera frame (ESP32-CAM). Stored under a server-generated name; the pothole detector (pretrained model, or the labelled heuristic fallback) may raise an UNREVIEWED hazard report."""
     import base64
     import binascii
     import json as _json
@@ -159,13 +159,13 @@ def post_image(call: DeviceCall = Depends(device_call), ctx=Depends(get_ctx)):
         image_id, path = images.store(data, ctx.settings.image_dir)
     except (binascii.Error, images.ImageError) as e:
         raise HTTPException(422, str(e) if isinstance(e, images.ImageError) else "invalid base64")
-    detections, reported = [], None
+    detections, reported, det_source = [], None, "camera_heuristic"
     try:
         import cv2
         import numpy as np
         from ..vision import pothole
         img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
-        detections = pothole.detect(img) if img is not None else []
+        detections, det_source = pothole.detect_labelled(img) if img is not None else ([], det_source)
     except ImportError:
         detections = []                                      # OpenCV not installed: the image is still stored for manual review
     ctx.db.execute("INSERT INTO images(id,device_id,path,bytes,edge,progress,created_at,detection) VALUES(?,?,?,?,?,?,?,?)",
@@ -173,7 +173,7 @@ def post_image(call: DeviceCall = Depends(device_call), ctx=Depends(get_ctx)):
     if detections and detections[0]["confidence"] >= 0.5:
         d = detections[0]
         try:
-            reported = ctx.hazards.create("pothole", body.edge, d["severity"], "camera_heuristic", status="reported",
+            reported = ctx.hazards.create("pothole", body.edge, d["severity"], det_source, status="reported",
                                           progress=body.progress, confidence=d["confidence"], image_id=image_id)
         except OverflowError:
             reported = None

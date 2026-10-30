@@ -74,5 +74,5 @@ def build(ctx) -> list:
                      else "run the backend on config/topology.grid.yaml for the 12-intersection city view"))
     open_h = ctx.hazards.list("active")
     rows.append(_row("Road conditions (hazards)", "Built",
-                     f"{len(open_h)} active; only operator-verified hazards affect routes; the camera pothole finder is a heuristic that needs operator verification"))
+                     f"{len(open_h)} active; only operator-verified hazards affect routes; the camera pothole finder (a pretrained road-damage model when installed, otherwise a heuristic) only proposes; an operator must verify"))
     return rows
