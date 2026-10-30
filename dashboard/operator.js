@@ -269,7 +269,8 @@ async function drawTab(d) {
     body.innerHTML = `<table><tr><th>time</th><th>approach</th><th>transition</th><th>reason</th></tr>${d.warning_events.map((e) => `<tr><td class="mono muted">${esc(e.ts.slice(11, 19))}</td><td>${esc(e.approach)}</td><td>${esc(e.from_state || "·")} → <span class="chip ${chipClass(e.to_state)}">${esc(e.to_state)}</span></td><td class="muted">${esc(e.reason)}</td></tr>`).join("") || "<tr><td class='muted'>No warnings yet.</td></tr>"}</table>`;
   } else if (tab === "audit") {
     const rows = await api("GET", "/api/operator/audit?limit=60");
-    body.innerHTML = auditVerifyBar() + `<table><tr><th>time</th><th>actor</th><th>role</th><th>action</th><th>result</th></tr>${rows.map((r) => `<tr><td class="mono muted">${esc(r.ts.slice(11, 19))}</td><td>${esc(r.actor)}</td><td>${esc(r.role)}</td><td>${esc(r.action)} ${esc(r.target || "")}</td><td><span class="chip ${r.result === "ok" ? "ok" : "bad"}">${esc(r.result)}</span></td></tr>`).join("")}</table>`;
+    const html = auditVerifyBar() + `<table><tr><th>time</th><th>actor</th><th>role</th><th>action</th><th>result</th></tr>${rows.map((r) => `<tr><td class="mono muted">${esc(r.ts.slice(11, 19))}</td><td>${esc(r.actor)}</td><td>${esc(r.role)}</td><td>${esc(r.action)} ${esc(r.target || "")}</td><td><span class="chip ${r.result === "ok" ? "ok" : "bad"}">${esc(r.result)}</span></td></tr>`).join("")}</table>`;
+    if (body._ah !== html || !body.querySelector("#au-verify")) { body.innerHTML = html; body._ah = html; }   // redraw only on change: a button replaced mid-click loses the click
   } else {
     body.innerHTML = provenanceTable(d.provenance);
   }
