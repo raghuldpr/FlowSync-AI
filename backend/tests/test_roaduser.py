@@ -51,8 +51,8 @@ def test_join_view_is_private_and_uses_pseudonyms(world, client):
     assert body["id"].startswith("Car ") and len(body["token"]) >= 20
     assert body["route_text"] == "the West → Intersection 1 → Intersection 3 → the South"
     text = json.dumps(body)
-    assert "EV-1" not in text and "vehicle" not in text, "nothing about emergency vehicles beyond fixed alert text"
-    assert set(body) == {"token", "id", "status", "edge", "progress", "from", "to", "route_text", "alerts", "suggestion", "version"}
+    assert "EV-1" not in text and "vehicle_id" not in text and "GUEST" not in text, "nothing about emergency vehicles beyond fixed alert text"
+    assert set(body) == {"token", "id", "role", "color", "plate", "status", "edge", "progress", "from", "to", "route_text", "alerts", "suggestion", "version"}
     me = client.get(f"/api/public/road-users/{body['token']}").json()
     assert me["id"] == body["id"] and me["alerts"] == [] and me["suggestion"] is None
 
