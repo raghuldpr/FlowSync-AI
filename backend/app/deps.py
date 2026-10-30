@@ -1,3 +1,4 @@
+import ipaddress
 import json
 from dataclasses import dataclass
 
@@ -14,6 +15,18 @@ def get_ctx(request: Request):
 
 
 def client_id(request: Request) -> str:
+    """The address rate limits and the audit log use. Behind a reverse proxy (FLOWSYNC_TRUST_PROXY_HOPS = N) it is the Nth entry
+    from the RIGHT of X-Forwarded-For (the entries to its left can be forged by the client); with N=0, or a missing or malformed
+    header, it is the direct peer."""
+    settings = getattr(getattr(request.app.state, "ctx", None), "settings", None)
+    hops = getattr(settings, "trust_proxy_hops", 0)
+    if hops > 0:
+        parts = [p.strip() for p in request.headers.get("x-forwarded-for", "").split(",") if p.strip()]
+        if len(parts) >= hops:
+            try:
+                return str(ipaddress.ip_address(parts[-hops]))
+            except ValueError:
+                pass
     return request.client.host if request.client else "unknown"
 
 

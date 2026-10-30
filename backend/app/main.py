@@ -1,10 +1,11 @@
 import asyncio
+import secrets
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Callable, Optional
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -28,6 +29,7 @@ from .llm.client import LLMClient
 from .core.store import Store
 from .core.topology import Topology
 from .db import Database, now_iso
+from .deps import client_id
 from .security import DeviceAuthenticator
 
 
@@ -38,6 +40,7 @@ PUBLIC_GET_PER_MIN = 3000     # per address; venue Wi-Fi puts many phones behind
 class Context:
     def __init__(self, settings: Settings, clock: Optional[Callable[[], float]] = None):
         self.settings = settings
+        self.instance_id = secrets.token_hex(4)      # new on every process start: two different values = two instances
         self.db = Database(settings.db_path)
         self.topology = Topology.load(settings.topology_path)
         self.device_specs = load_yaml(settings.devices_path)["devices"]
@@ -111,7 +114,7 @@ def create_app(settings: Optional[Settings] = None, clock: Optional[Callable[[],
         if too_big:
             return JSONResponse({"detail": "request body too large"}, status_code=413)
         if request.method == "GET" and request.url.path.startswith("/api/public/") and \
-                not ctx.rate.allow("pub:" + (request.client.host if request.client else "?"), PUBLIC_GET_PER_MIN, 60):
+                not ctx.rate.allow("pub:" + client_id(request), PUBLIC_GET_PER_MIN, 60):
             return JSONResponse({"detail": "too many requests"}, status_code=429)
         resp = await call_next(request)
         route = request.scope.get("route")
@@ -119,6 +122,12 @@ def create_app(settings: Optional[Settings] = None, clock: Optional[Callable[[],
         ctx.metrics.observe(f"http {request.method} {path}", (time.perf_counter() - t0) * 1000.0)
         ctx.metrics.count(f"http_{resp.status_code // 100}xx")
         return resp
+    @app.get("/api/whoami")
+    def whoami(request: Request):
+        """What the server sees: the client address its rate limits use, and this process's id. Used to check proxy settings
+        (the address must be yours, not the host's proxy) and that a hosted app runs as ONE instance (the id never changes)."""
+        return {"client_address": client_id(request), "trusted_proxy_hops": settings.trust_proxy_hops, "instance": ctx.instance_id}
+
     app.include_router(public.router)
     app.include_router(device.router)
     app.include_router(operator.router)

@@ -27,7 +27,7 @@ def _user(ctx, token: str):
 @router.post("/api/public/road-users")
 def join(body: JoinIn, request: Request, ctx=Depends(get_ctx)):
     """Anonymous: pick where you enter and where you are going; you get a pseudonym, a token and your own alert feed."""
-    if not ctx.rate.allow(f"join:{client_id(request)}", 10, 60):
+    if not ctx.rate.allow(f"join:{client_id(request)}", ctx.settings.join_per_min, 60):
         raise HTTPException(429, "too many sessions from this address; wait a minute")
     topo = ctx.topology
     ext = sorted(n for n in topo.nodes if n not in topo.intersections)
@@ -35,7 +35,7 @@ def join(body: JoinIn, request: Request, ctx=Depends(get_ctx)):
     if body.role == "ambulance":
         origin = origin or topo.ev.default_origin
         destination = destination or topo.ev.default_destination
-        if not ctx.rate.allow(f"join-amb:{client_id(request)}", 3, 60):
+        if not ctx.rate.allow(f"join-amb:{client_id(request)}", ctx.settings.join_ambulance_per_min, 60):
             raise HTTPException(429, "too many ambulance trips from this address; wait a minute")
     else:
         origin = origin or random.choice(ext)                                   # QR gate link may pin the entrance (?gate=ext_W)

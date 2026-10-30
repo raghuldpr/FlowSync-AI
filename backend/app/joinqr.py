@@ -4,6 +4,7 @@ The laptop's address changes whenever the phone hotspot restarts, so run this ea
 
     python -m app.joinqr                      # auto-detect the LAN address
     python -m app.joinqr --host 192.168.43.5  # or give it explicitly
+    python -m app.joinqr --url https://my-app.catalystappsail.com   # a hosted backend (or set FLOWSYNC_PUBLIC_URL)
 
 It writes data/qr/join.html (open it and print it; it needs no internet) with one QR code per page
 and per entrance gate. The gate is passed as ?gate=<id> for the phone page to use.
@@ -35,7 +36,11 @@ def gates(topology_path: str) -> list:
 
 
 def build(host: str, port: int, topology_path: str) -> list:
-    base = f"http://{host}:{port}"
+    return build_url(f"http://{host}:{port}", topology_path)
+
+
+def build_url(base: str, topology_path: str) -> list:
+    base = base.rstrip("/")
     items = [("Join as a driver", f"{base}/driver.html"), ("Big screen (presenter)", f"{base}/presenter.html"),
              ("Operator", f"{base}/operator.html")]
     items += [(f"Driver, entering at {g}", f"{base}/driver.html?gate={g}") for g in gates(topology_path)]
@@ -58,13 +63,24 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--host", help="laptop address on the hotspot (default: first detected LAN address)")
     ap.add_argument("--port", type=int, default=8000)
+    ap.add_argument("--url", help="public base URL of a hosted backend (default: FLOWSYNC_PUBLIC_URL); skips LAN detection")
     a = ap.parse_args()
+    url = a.url or Settings().public_url
+    if url:
+        if not url.lower().startswith(("http://", "https://")):
+            raise SystemExit("--url / FLOWSYNC_PUBLIC_URL must start with http:// or https://")
+        items = build_url(url, Settings().topology_path)
+        return _emit(items, "A hosted backend is used: boards need its public address and TLS (https), not a LAN address.")
     ips = sorted(lan_addresses())
     # Windows Mobile Hotspot (ICS) gives the laptop 192.168.137.1; prefer it when the hotspot is on.
     host = a.host or next((ip for ip in ips if ip.startswith("192.168.137.")), None) or next(iter(ips), None)
     if not host:
         raise SystemExit("No LAN address found. Connect to the hotspot first, or pass --host.")
     items = build(host, a.port, Settings().topology_path)
+    _emit(items, f"Firmware config.h BACKEND_HOST should be: {host}")
+
+
+def _emit(items: list, footer: str):
     for t, u in items:
         print(f"{t:32s} {u}")
     try:
@@ -72,7 +88,7 @@ def main():
     except ImportError:
         raise SystemExit("\nInstall the QR package to write the sheet:  pip install -r requirements-demo.txt")
     print(f"\nPrintable QR sheet: {out}")
-    print("Firmware config.h BACKEND_HOST should be:", host)
+    print(footer)
 
 
 if __name__ == "__main__":
