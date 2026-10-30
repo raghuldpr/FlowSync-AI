@@ -23,11 +23,14 @@ SYSTEM_PROMPT = (
     "4. Never write messages for drivers or the public, and never suggest anyone disobey a signal or road rule.\n"
     "5. For questions about roads, entrances or 'what if a road were closed', first call get_network_map to learn the ids, "
     "then get_road_closure_impact; do not answer that you lack topology data without calling them.\n"
-    "6. Be concise: plain sentences that cite approach and intersection ids and units (vehicles, seconds)."
+    "6. Always report anything a tool marks as NO route, unreachable, stale or missing; never describe such a result as harmless.\n"
+    "7. Be concise: plain sentences that cite approach and intersection ids and units (vehicles, seconds)."
 )
 
 WRITE_INTENT = re.compile(r"\b(propose|adjust|change|extend|give|switch|prioriti[sz]e|request|hold|serve)\b", re.I)
 MAX_ANSWER = 2000
+NUDGE = ("Give your final answer now in plain sentences, using only the tool results above. "
+         "Do not call any more tools. If something is missing, say so.")
 
 
 def ask(ctx, question: str, caller: dict) -> dict:
@@ -57,18 +60,24 @@ def _ask(ctx, question: str, caller: dict, summaries: list) -> dict:
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": question}]
     deadline = time.monotonic() + cfg.llm_deadline_s
+    nudged = False                       # some models finish a tool round with an empty message; ask once for the answer
     try:
         for _ in range(cfg.llm_max_tool_calls + 2):
             left = deadline - time.monotonic()
             if left <= 1:
                 return fall_back("deadline")
             budget_left = cfg.llm_max_tool_calls - len(calls)
-            msg = client.chat(messages, T.specs(write_allowed) if budget_left > 0 else None, timeout=min(cfg.llm_timeout_s, left))
+            msg = client.chat(messages, T.specs(write_allowed) if budget_left > 0 and not nudged else None,
+                              timeout=min(cfg.llm_timeout_s, left))
             tcs = msg.get("tool_calls")
             if not tcs:
                 content = msg.get("content")
                 if not isinstance(content, str) or not content.strip():
-                    return fall_back("empty_answer")
+                    if nudged:
+                        return fall_back("empty_answer")
+                    nudged = True
+                    messages.append({"role": "user", "content": NUDGE})
+                    continue
                 return {"answer": content.strip()[:MAX_ANSWER], "mode": "llm", "model": client.model, "tool_calls": calls, "proposals": proposals,
                         "fallback_reason": None}
             if not isinstance(tcs, list):

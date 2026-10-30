@@ -276,8 +276,24 @@ def test_trace_shows_proposal_and_validator_verdict(world):
     assert "operator must confirm" in t["proposals"][0]["note"]
 
 
+def test_empty_message_after_tools_gets_one_nudge_then_answers(world):
+    r = ask(world, "How busy is L13?", [call("get_traffic_state", {}), {"content": ""}, say("L13 has 6 vehicles.")])
+    assert r["mode"] == "llm" and r["answer"] == "L13 has 6 vehicles." and r["fallback_reason"] is None
+    seen = world.llm.seen
+    assert seen[-1]["tools"] is None and seen[-1]["messages"][-1]["content"] == orchestrator.NUDGE   # no tools on the nudge
+
+
+def test_two_empty_messages_still_fall_back(world):
+    r = ask(world, "How busy is L13?", [{"content": ""}, {"content": ""}])
+    assert r["mode"] == "deterministic_fallback" and r["fallback_reason"] == "empty_answer"
+
+
+def test_system_prompt_requires_reporting_unreachable_trips():
+    assert "NO route" in orchestrator.SYSTEM_PROMPT and "never describe such a result as harmless" in orchestrator.SYSTEM_PROMPT
+
+
 def test_trace_labels_the_fallback_and_refused_calls(world):
-    r = ask(world, "x", [call("drop_tables", {}), {"content": "  "}])
+    r = ask(world, "x", [call("drop_tables", {}), {"content": "  "}, {"content": ""}])
     t = traces_mod.recent(world, 1)[0]
     assert r["mode"] == "deterministic_fallback" and t["source"]["kind"] == "fallback" and t["fallback_reason"] == "empty_answer"
     assert t["steps"][0]["ok"] is False and t["steps"][0]["result"] == "refused"
