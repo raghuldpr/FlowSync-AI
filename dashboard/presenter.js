@@ -22,7 +22,11 @@ const PROV = { Built: "ok", Simulated: "warn", Replay: "warn", "Not connected": 
 
 async function tick() {
   try {
-    const [s, prov] = await Promise.all([get("/api/operator/scenario"), get("/api/operator/provenance")]);
+    const [s, prov, feed] = await Promise.all([get("/api/operator/scenario"), get("/api/operator/provenance"), get("/api/operator/road-users/feed")]);
+    $("#guest-tiles").innerHTML = [["on the road", feed.total], ["warned now", feed.warned], ["ambulances", feed.ambulances.length]]
+      .map(([k, v]) => `<div class="tile"><b>${esc(v)}</b>${esc(k)}</div>`).join("");
+    $("#guests").innerHTML = feed.users.map((u) => `<span class="gcar ${u.warned ? "warned" : ""}"><i style="background:${u.role === "ambulance" ? "#c43030" : esc(u.color)}"></i>${esc(u.id)} · ${esc(u.plate)} — ${u.role === "ambulance" ? "ambulance" : u.warned ? "warned" : "not warned"}</span>`).join("")
+      || '<span class="muted">Nobody has joined yet. Scan the QR code.</span>';
     $("#title").textContent = s.title || "FlowSync AI";
     const st = $("#state"); st.textContent = s.state; st.className = "chip " + ({ running: "ok", finished: "ok", stopped: "warn" }[s.state] || "stale");
     const w = $("#world"); w.textContent = s.world === "simulator" ? "simulated world" : "physical table"; w.className = "chip " + (s.world === "simulator" ? "warn" : "ok");
