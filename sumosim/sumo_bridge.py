@@ -21,9 +21,18 @@ from . import binary
 ZONE_M = 60.0          # camera zone: the last stretch before each stop line (~8 queued cars, the tabletop camera's ROI)
 HALT_SPEED = 0.1       # m/s below which a vehicle counts as stopped
 STEP_S = 0.5           # SUMO step length
+EV_ID = "EV-1"
+CLOSE_S = 3.0          # after the final report, an ambulance session still active this long is a new one on the same route
+# (a new session is also recognised by a different route, or by having no position yet once the old vehicle has left SUMO)
+REPORT_MAX = 0.97      # the backend treats progress 1.0 as "past the edge", so reports are capped like the tabletop's
 ENTRIES = ("W1", "E2", "S3")
 EXITS = ("O1", "O2", "O3")
 LAMP = {"G": "G", "Y": "y", "R": "r"}
+
+
+def remaining_route(route: list, current_edge: str):
+    """The part of the backend's route SUMO still has to drive, or None if the vehicle is not on it."""
+    return route[route.index(current_edge):] if current_edge in route else None
 
 
 class SumoWorld:
@@ -42,8 +51,10 @@ class SumoWorld:
         self.ctl = DeviceClient(client, "simulator-1", devices["simulator-1"]["key"]) if "simulator-1" in devices else None
         self.camera_on, self.link_up = True, True
         self.pins, self.stalled = {}, set()
-        self.ev_drive, self._ev_arrived = None, False
-        self.ev_stats = {"wait_s": 0.0, "stops": 0, "entered_s": None, "exited_s": None}
+        self.ev_vid, self.ev_follow = EV_ID, True     # follow the backend's active session for this vehicle (any number of trips)
+        self.ev_trip = None                            # the trip in SUMO right now: {"route", "done"}
+        self.ev_trips = []                             # stats of every finished trip, oldest first
+        self.ev_stats = self._new_ev_stats()           # the current (or latest) trip
         self._ev_waiting = False
         self.unsafe_seen = False
         self.last_ok_ms, self._cmd_cursor = 0, None
@@ -156,7 +167,7 @@ class SumoWorld:
         for v in c.vehicle.getIDList():
             self._wait[v] = c.vehicle.getAccumulatedWaitingTime(v)
         for v in c.simulation.getArrivedIDList():
-            if v == "EV-1":
+            if v == EV_ID:
                 self.ev_stats["exited_s"] = now_s
                 continue
             if v.startswith("pin") or v.startswith("stall"):
@@ -230,7 +241,7 @@ class SumoWorld:
         if op == "reset":
             self._clear_blockers()
             self.pins.clear(); self.stalled.clear()
-            self.camera_on, self.link_up, self.ev_drive = True, True, None
+            self.camera_on, self.link_up, self.ev_follow = True, True, True
             self.rates = dict(self.default_rates)
         elif op == "rates":
             if "all" in cmd:
@@ -257,11 +268,9 @@ class SumoWorld:
         elif op == "link":
             self.link_up = bool(cmd["on"])
         elif op == "drive_ev":
-            if cmd.get("on", True):
-                self.ev_drive = {"vehicle_id": cmd["vehicle_id"]}
-                self._ev_arrived = False
-            else:
-                self.ev_drive = None
+            self.ev_follow = bool(cmd.get("on", True))
+            if self.ev_follow:
+                self.ev_vid = cmd["vehicle_id"]
 
     def _place_blockers(self, edge: str, n: int, kind: str):
         """A breakdown (stall: one vehicle stopped in the right lane) or a jam (pin: a short crawling queue, see _topup_pins).
@@ -313,50 +322,74 @@ class SumoWorld:
                 self.conn.vehicle.remove(v)
 
     # ---- the ambulance ---------------------------------------------------------------------------------------------------
+    @staticmethod
+    def _new_ev_stats() -> dict:
+        return {"wait_s": 0.0, "stops": 0, "entered_s": None, "exited_s": None}
+
     def _drive_ev(self):
-        d = self.ev_drive
-        if not d or self._ev_arrived:
+        """Follow the backend's active session for the ambulance, trip after trip. A trip starts when a session is active
+        and the vehicle is not in SUMO, ends when the vehicle leaves SUMO at the end of its route (a final report lets the
+        backend close the session), and the next session starts a new trip."""
+        if not self.ev_follow:
             return
-        c, vid = self.conn, d["vehicle_id"]
+        c, vid = self.conn, self.ev_vid
         r = self.ctl.request("GET", "/api/device/sim-ev", params={"vehicle_id": vid})
         info = r.json() if r.status_code == 200 else {}
+        present = EV_ID in c.vehicle.getIDList()
         if info.get("status") != "active":
+            if present:
+                c.vehicle.remove(EV_ID)                          # the backend ended the session early: cancelled, not arrived
+            elif self.ev_trip is not None and not self.ev_trip["done"]:
+                self.ev_trips.append(dict(self.ev_stats))        # it left SUMO and the backend closed the session: arrived
+            self.ev_trip = None
             return
         route = info["route"]
-        if "EV-1" not in c.vehicle.getIDList():
-            if self.ev_stats["entered_s"] is not None:        # it was here and has gone: arrived
-                self._ev_arrived = True
-                return
-            c.route.add(f"ev_{self._n}", route)
-            c.vehicle.add("EV-1", f"ev_{self._n}", typeID="ambulance", departLane="best", departSpeed="max")
-            self._n += 1
-            self.ev_stats["entered_s"] = self.now_ms / 1000
+        if not present:
+            trip = self.ev_trip
+            now_s = self.now_ms / 1000
+            if trip is not None and (list(route) != trip["route"]
+                                     or (info.get("edge") is None and now_s - trip["start_s"] > 5.0)
+                                     or (trip["done"] and now_s - trip["done_s"] > CLOSE_S)):
+                if not trip["done"]:                              # it left SUMO and the backend already closed its session
+                    self.ev_trips.append(dict(self.ev_stats))
+                trip = self.ev_trip = None                        # a new session began before the old one was seen to end
+            if trip is None:                                      # a new session: start a new trip
+                c.route.add(f"ev_{self._n}", route)
+                c.vehicle.add(EV_ID, f"ev_{self._n}", typeID="ambulance", departLane="best", departSpeed="max")
+                self._n += 1
+                self.ev_trip = {"route": list(route), "done": False, "start_s": self.now_ms / 1000}
+                self.ev_stats = self._new_ev_stats()
+                self.ev_stats["entered_s"] = self.now_ms / 1000
+                self._ev_waiting = False
+            elif not trip["done"]:                                # it was here and has gone: arrived
+                trip["done"], trip["done_s"] = True, self.now_ms / 1000
+                self.ev_trips.append(dict(self.ev_stats))
+                self.cam.request("POST", "/api/device/ev-position", {      # SUMO removes it between two reports
+                    "vehicle_id": vid, "edge": trip["route"][-1], "progress": REPORT_MAX, "source": "simulated"})
             return
-        edge = c.vehicle.getRoadID("EV-1")
+        edge = c.vehicle.getRoadID(EV_ID)
         if edge.startswith(":") or edge not in self.topo.edges:
             return                                              # inside a junction: keep the last report
-        if edge in route:
-            tail = route[route.index(edge):]
-            if tail != list(c.vehicle.getRoute("EV-1"))[c.vehicle.getRouteIndex("EV-1"):]:
-                try:
-                    c.vehicle.setRoute("EV-1", tail)
-                except traci.TraCIException:
-                    pass
-        speed = c.vehicle.getSpeed("EV-1")
-        waiting = speed < HALT_SPEED
+        tail = remaining_route(route, edge)
+        if tail and tail != list(c.vehicle.getRoute(EV_ID))[c.vehicle.getRouteIndex(EV_ID):]:
+            try:
+                c.vehicle.setRoute(EV_ID, tail)
+            except traci.TraCIException:
+                pass
+        waiting = c.vehicle.getSpeed(EV_ID) < HALT_SPEED
         if waiting:
             self.ev_stats["wait_s"] += 1.0
             if not self._ev_waiting:
                 self.ev_stats["stops"] += 1
         self._ev_waiting = waiting
-        progress = min(c.vehicle.getLanePosition("EV-1") / self._lane_len[edge], 0.97)
+        progress = min(c.vehicle.getLanePosition(EV_ID) / self._lane_len[edge], REPORT_MAX)
         self.cam.request("POST", "/api/device/ev-position",
                          {"vehicle_id": vid, "edge": edge, "progress": progress, "source": "simulated"})
 
     def ev_where(self) -> str:
-        if "EV-1" not in self.conn.vehicle.getIDList():
+        if EV_ID not in self.conn.vehicle.getIDList():
             return "-"
-        return f"{self.conn.vehicle.getRoadID('EV-1')}@{self.conn.vehicle.getSpeed('EV-1'):.0f}m/s"
+        return f"{self.conn.vehicle.getRoadID(EV_ID)}@{self.conn.vehicle.getSpeed(EV_ID):.0f}m/s"
 
     # ---- results ----------------------------------------------------------------------------------------------------------------
     def summary(self) -> dict:
