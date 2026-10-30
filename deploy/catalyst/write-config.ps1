@@ -9,11 +9,14 @@
   The file is git-ignored (deploy\catalyst\.gitignore) because it holds your passwords: do not commit or share it. It goes to
   YOUR Catalyst account with the deploy, as do your private device keys. Run this again if init replaced the file.
   The LLM settings are NOT written here: set LLM_* in the Catalyst console (the key stays out of files).
-  FLOWSYNC_PUBLIC_URL is not written either: set it in the console once you know the service address.
+  FLOWSYNC_PUBLIC_URL is written only when you pass -PublicUrl (you know the service address after the first deploy).
 
 .EXAMPLE
   .\deploy\catalyst\write-config.ps1
+  .\deploy\catalyst\write-config.ps1 -PublicUrl https://flowsync-123.development.catalystappsail.in
 #>
+[CmdletBinding()]
+param([string]$PublicUrl = '')       # the service address, e.g. https://name-id.development.catalystappsail.in (no trailing slash)
 $ErrorActionPreference = 'Stop'
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $Dir  = Join-Path $PSScriptRoot 'appsail'
@@ -43,6 +46,10 @@ foreach ($p in $example.env_variables.PSObject.Properties) {
   $envVars[$p.Name] = $p.Value
 }
 foreach ($n in $names) { $envVars[$n] = $vals[$n] }
+if ($PublicUrl) {
+  if ($PublicUrl -notmatch '^https://[^/\s]+$') { throw 'PublicUrl must look like https://host (https, no path, no trailing slash).' }
+  $envVars['FLOWSYNC_PUBLIC_URL'] = $PublicUrl
+}
 
 $cfg | Add-Member -NotePropertyName command -NotePropertyValue $example.command -Force
 $cfg | Add-Member -NotePropertyName memory -NotePropertyValue $example.memory -Force
