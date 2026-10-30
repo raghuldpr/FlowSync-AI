@@ -9,6 +9,9 @@ is separate and is not wired to the table. This replaces the earlier one-ESP32 +
 > Status: firmware compiles and its logic is host-tested; **wiring and the lamps have not yet been checked on a board.** Bench-test
 > every module with the `board1_test` / `board2_test` firmware (section 4) before gluing anything.
 
+**Part check:** the SN74LS95N chips that were bought are not usable here (no latch, no output enable, they cannot drive the modules) and are not part of the build.
+**Layout:** board 45 x 29 cm (0.55 mm per layout unit): I1 and I2 on top, I3 below, West, East and South external roads about 2.2 cm wide.
+
 ## 1. Which module is which
 
 | Board | Module | Lamp | Role |
