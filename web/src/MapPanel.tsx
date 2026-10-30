@@ -32,8 +32,9 @@ export default function MapPanel({ className = '' }: { className?: string }) {
   const live = useStore((s) => (s.auth && s.live.ov ? s.live.ov : null))
   const [open, setOpen] = useState(false)
   const emergency = live ? live.ev.some((e) => e.status === 'active') : scenario === 'emergency'
+  const offline = useStore((s) => !!s.auth && !s.live.ok && s.live.updated > 0)
   const sub = live
-    ? `Live from the FlowSync backend${emergency ? ' · ambulance on the road' : ''}`
+    ? offline ? 'Backend not reachable · showing the last data received' : `Live from the FlowSync backend${emergency ? ' · ambulance on the road' : ''}`
     : emergency ? 'Real-time traffic simulation with emergency response' : 'Real-time traffic simulation'
 
   return (
