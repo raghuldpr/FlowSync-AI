@@ -57,7 +57,6 @@ def run(client, password: str, drill: str = None, wait_s: float = 90.0, sleep=ti
         status = {"ok": PASS, "warn": WARN, "fail": FAIL}[c["status"]]
         if demo and c["name"] == "credentials" and status == WARN:
             status = FAIL                # an open demo must not run on the published development passwords and keys
-            c = dict(c, detail=c["detail"] + " -> run: python -m app.setup_demo")
         add(status, c["name"], c["detail"])
 
     prov = client.get("/api/operator/provenance", headers=h).json()
@@ -153,8 +152,10 @@ def main(argv=None) -> int:
     for status, name, detail in results:
         print(f"[{status}] {name.ljust(width)}  {detail}")
     ips = lan_addresses()
+    from urllib.parse import urlparse
+    port = urlparse(a.url).port or 8000
     if ips:
-        print(f"\nThis machine's LAN address(es): {', '.join(ips)}  -> use as BACKEND_HOST in firmware config.h; phones open http://{ips[0]}:8000/driver.html")
+        print(f"\nThis machine's LAN address(es): {', '.join(ips)}  -> use as BACKEND_HOST in firmware config.h; phones open http://{ips[0]}:{port}/driver.html")
     fails = sum(1 for r in results if r[0] == FAIL)
     print(f"\n{'READY' if not fails else 'NOT READY'}: {sum(r[0] == PASS for r in results)} pass, {sum(r[0] == WARN for r in results)} warn, {fails} fail")
     return 1 if fails else 0
