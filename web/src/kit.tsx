@@ -1,7 +1,7 @@
 // Pieces shared by the demo scene (Scene.tsx) and the live, topology-driven scene (LiveScene.tsx).
 import { useEffect, useLayoutEffect, useMemo, useRef, type ComponentRef, type ReactNode } from 'react'
-import { useFrame } from '@react-three/fiber'
-import { Html, OrbitControls } from '@react-three/drei'
+import { useFrame, useThree } from '@react-three/fiber'
+import { OrbitControls } from '@react-three/drei'
 import { Bloom, EffectComposer } from '@react-three/postprocessing'
 import * as THREE from 'three'
 import { useStore } from './store'
@@ -94,16 +94,61 @@ export function CarShape({ status, color }: { status: CarStatus; color?: string 
   )
 }
 
+/**
+ * A label that follows a point in the scene. It is plain DOM placed over the canvas: drei's <Html> mounts a React root per label,
+ * and unmounting that root while React renders (a car leaving, a tag toggled) throws in React 19.
+ */
+export function ScreenTag({ badge, badgeClass, text, y = 1.7 }: { badge?: string; badgeClass?: string; text: string; y?: number }) {
+  const anchor = useRef<THREE.Group>(null)
+  const box = useRef<HTMLDivElement | null>(null)
+  const gl = useThree((s) => s.gl)
+  const camera = useThree((s) => s.camera)
+  const size = useThree((s) => s.size)
+  const v = useMemo(() => new THREE.Vector3(), [])
+
+  useEffect(() => {
+    const host = gl.domElement.parentElement
+    if (!host) return
+    const el = document.createElement('div')
+    el.className = 'pointer-events-none absolute left-0 top-0 z-10 hidden'
+    host.appendChild(el)
+    box.current = el
+    return () => { el.remove(); box.current = null }
+  }, [gl])
+
+  useEffect(() => {
+    const el = box.current
+    if (!el) return
+    el.replaceChildren()
+    const col = document.createElement('div')
+    col.className = 'flex flex-col items-center gap-0.5 whitespace-nowrap font-mono text-[12px] leading-none'
+    if (badge) {
+      const b = document.createElement('span')
+      b.className = `rounded-sm px-1.5 py-[3px] font-semibold text-white ${badgeClass ?? 'bg-slate-500/90'}`
+      b.textContent = badge
+      col.appendChild(b)
+    }
+    const t = document.createElement('span')
+    t.className = 'rounded-sm border border-sky-400/70 bg-navy/80 px-1.5 py-[3px] text-sky-200'
+    t.textContent = text
+    col.appendChild(t)
+    el.appendChild(col)
+  }, [badge, badgeClass, text, gl])
+
+  useFrame(() => {
+    const el = box.current, a = anchor.current
+    if (!el || !a) return
+    a.getWorldPosition(v).project(camera)
+    const hidden = v.z > 1 || Math.abs(v.x) > 1.2 || Math.abs(v.y) > 1.2
+    el.classList.toggle('hidden', hidden)
+    if (!hidden) el.style.transform = `translate(${((v.x + 1) / 2) * size.width}px, ${((1 - v.y) / 2) * size.height}px) translate(-50%, -50%)`
+  })
+  return <group ref={anchor} position={[0, y, 0]} />
+}
+
 export function CarTag({ status, id }: { status: CarStatus; id: string }) {
   const label = status === 'warned' ? 'WARNED' : status === 'rerouted' ? 'REROUTED' : ''
-  return (
-    <Html position={[0, 1.7, 0]} center zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }}>
-      <div className="flex flex-col items-center gap-0.5 whitespace-nowrap font-mono text-[10px] leading-none">
-        {label && <span className={`rounded-sm px-1.5 py-[3px] font-semibold text-white ${status === 'warned' ? 'bg-danger/90' : 'bg-ok/90'}`}>{label}</span>}
-        <span className="rounded-sm border border-sky-400/70 bg-navy/80 px-1.5 py-[3px] text-sky-200">{id}</span>
-      </div>
-    </Html>
-  )
+  return <ScreenTag badge={label || undefined} badgeClass={status === 'warned' ? 'bg-danger/90' : 'bg-ok/90'} text={id} />
 }
 
 /* ---------- ambulance with warning rings ---------- */
@@ -163,7 +208,7 @@ export function Ambulance({ showRings, getPose }: { showRings: boolean; getPose:
 }
 
 /* ---------- camera ---------- */
-export const OFFSET = { '3d': new THREE.Vector3(-28, 36, 34), '2d': new THREE.Vector3(0, 66, 0.01) }
+export const OFFSET = { '3d': new THREE.Vector3(-34, 43, 41), '2d': new THREE.Vector3(0, 66, 0.01) }
 export type Focus = () => { x: number; z: number } | null
 
 export function CameraRig({ focus }: { focus: Focus }) {

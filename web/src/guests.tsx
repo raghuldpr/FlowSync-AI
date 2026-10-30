@@ -2,11 +2,10 @@
 // Everything V2V here is SIMULATED by the backend; the wording below is fixed and never urges anyone to hurry.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { Ambulance as AmbulanceIcon, Radio } from 'lucide-react'
 import { Badge, Card } from './Cards'
-import { CarShape, reduced, STATUS_HEX } from './kit'
+import { CarShape, ScreenTag, reduced, STATUS_HEX } from './kit'
 import { isWarned, safeColor, type RoadUser } from './live'
 import type { CarStatus } from './sim'
 import { useStore } from './store'
@@ -65,14 +64,7 @@ export function GuestCar({ u, pose, status, bornAt, tag }: { u: RoadUser; pose: 
         <mesh ref={ripple} visible={false}><ringGeometry args={[0.93, 1, 48]} /><meshBasicMaterial color={color} transparent depthWrite={false} toneMapped={false} blending={THREE.AdditiveBlending} /></mesh>
       </group>
       {tag && (
-        <Html position={[0, 1.7, 0]} center zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }}>
-          <div className="flex flex-col items-center gap-0.5 whitespace-nowrap font-mono text-[10px] leading-none">
-            {label && (
-              <span className={`rounded-sm px-1.5 py-[3px] font-semibold text-white ${status === 'warned' ? 'bg-danger/90' : status === 'rerouted' ? 'bg-ok/90' : 'bg-slate-500/90'}`}>{label}</span>
-            )}
-            <span className="rounded-sm border border-sky-400/70 bg-navy/80 px-1.5 py-[3px] text-sky-200">{u.plate ?? u.id}</span>
-          </div>
-        </Html>
+        <ScreenTag badge={label || undefined} badgeClass={status === 'warned' ? 'bg-danger/90' : status === 'rerouted' ? 'bg-ok/90' : 'bg-slate-500/90'} text={u.plate ?? u.id} />
       )}
     </group>
   )
@@ -108,7 +100,7 @@ export function V2vBanner() {
       <div className="flex items-center gap-2 text-[13px] font-semibold">
         <Radio size={15} aria-hidden /> SIMULATED V2V · Emergency vehicle alert
       </div>
-      <div className="text-[11.5px] opacity-90">{last.from}: heard by {last.heard} of {last.drivers} cars · {feed.warned} of {feed.total} warned now</div>
+      <div className="text-[11.5px] opacity-90">{last.from}: heard by {last.heard} of {last.drivers} cars · {feed.warned} warned now</div>
     </div>
   )
 }
@@ -126,13 +118,14 @@ export function GuestsCard() {
   const guests = users.filter((u) => !u.simulated)
   const scripted = users.length - guests.length
   const warned = users.filter(isWarned).length
+  const cars = users.filter((u) => u.role !== 'ambulance').length
   const evs = (ov?.ev ?? []).filter((e) => e.status === 'active')
   const emergency = evs.length > 0 || warned > 0
   const label = (id: string) => topo?.nodes[id]?.label ?? id
   const held = Object.values(ov?.signals ?? {}).filter((s) => s.commanded?.reason.startsWith('emergency')).length
   const sorted = [...guests].sort((a, b) => Number(isWarned(b)) - Number(isWarned(a)) || a.id.localeCompare(b.id, undefined, { numeric: true }))
   return (
-    <Card title="Guests on the road" right={<Badge tone={warned ? 'danger' : 'mute'}>{warned} of {users.length} warned</Badge>}>
+    <Card title="Guests on the road" right={<Badge tone={warned ? 'danger' : 'mute'}>{warned} of {cars} cars warned</Badge>}>
       {err && <p className="mb-2 rounded-md bg-warn/15 px-2 py-1 text-[12px] text-amber-700">Backend not answering ({err}). Showing the last data received.</p>}
       {evs.length > 0 && (
         <ul className="mb-3 space-y-1.5">

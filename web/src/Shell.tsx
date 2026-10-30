@@ -87,7 +87,7 @@ export function Header({ onMenu }: { onMenu: () => void }) {
         </div>
         <button type="button" onClick={() => (auth ? setAuth(null) : setLoginOpen(true))} title={auth ? 'Sign out and return to demo data' : 'Sign in to show real backend data'}
           className={`hidden rounded-full border px-3 py-1.5 text-[12.5px] font-medium xl:block ${auth ? 'border-ok/40 bg-ok/5 text-emerald-700' : 'border-line text-muted hover:bg-app'}`}>
-          {auth ? `Live data · ${auth.user}` : 'Demo data · Sign in'}
+          {auth ? (live.ov ? `Live data · ${auth.user}` : 'No backend yet · demo data') : 'Demo data · Sign in'}
         </button>
       </div>
 
@@ -149,6 +149,9 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const rows = useComponentRows()
   const nav = useStore((s) => s.nav)
   const setNav = useStore((s) => s.setNav)
+  const offline = useStore((s) => !!s.auth && !s.live.ok && s.live.updated > 0)
+  const down = rows.filter((r) => statusTone(r.status) === 'danger').length
+  const health = offline ? 'Backend not reachable' : down ? `${down} of ${rows.length} not connected` : 'All systems nominal'
   return (
     <>
       {open && <button type="button" aria-label="Close navigation" className="fixed inset-0 z-40 bg-black/30 md:hidden" onClick={onClose} />}
@@ -172,7 +175,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           ))}
         </nav>
         <div className="card mt-3 p-3 md:hidden xl:block">
-          <div className="flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-ok" /><div className="leading-tight"><div className="text-[13px] font-semibold">System Health</div><div className="text-[11px] text-muted">All systems nominal</div></div></div>
+          <div className="flex items-center gap-2"><i className={`h-2.5 w-2.5 rounded-full ${offline ? 'bg-danger' : down ? 'bg-amber-400' : 'bg-ok'}`} /><div className="leading-tight"><div className="text-[13px] font-semibold">System Health</div><div className="text-[11px] text-muted">{health}</div></div></div>
           <ul className="mt-2.5 space-y-1.5">
             {rows.slice(0, 6).map((r) => (
               <li key={r.name} className="flex items-center justify-between gap-1 text-[11.5px]" title={r.detail}><span className="flex min-w-0 items-center gap-1.5 truncate"><i className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusTone(r.status) === 'ok' ? 'bg-ok' : statusTone(r.status) === 'danger' ? 'bg-danger' : 'bg-slate'}`} /><span className="truncate">{r.name.replace(/ \(.*\)/, '').replace(' (background)', '').replace(' simulation', ' Sim')}</span></span><span className="shrink-0"><Badge tone={statusTone(r.status)}>{r.status}</Badge></span></li>
