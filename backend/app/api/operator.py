@@ -86,7 +86,7 @@ def events(limit: int = Query(50, ge=1, le=500), _=Depends(require_viewer), ctx=
 
 @router.get("/api/operator/audit")
 def audit_log(limit: int = Query(100, ge=1, le=1000), _=Depends(require_viewer), ctx=Depends(get_ctx)):
-    return ctx.db.query("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?", (limit,))
+    return ctx.db.query("SELECT id, ts, actor, role, action, target, params, result FROM audit_log ORDER BY id DESC LIMIT ?", (limit,))
 
 
 @router.get("/api/operator/devices")

@@ -3,8 +3,9 @@ from pydantic import BaseModel, Field
 
 from ..audit import audit
 from ..deps import require_viewer, get_ctx, require_operator
-from ..llm import orchestrator
+from ..llm import orchestrator, traces
 
+KEEP = traces.KEEP
 router = APIRouter(tags=["llm"])
 
 
@@ -21,6 +22,12 @@ def llm_status(_=Depends(require_viewer), ctx=Depends(get_ctx)):
 def llm_query(body: QueryIn, sess=Depends(require_operator), ctx=Depends(get_ctx)):
     """Operator-only. Runs the LLM tool loop, or the deterministic fallback if the model is unavailable."""
     return orchestrator.ask(ctx, body.question, sess)
+
+
+@router.get("/api/operator/llm/traces")
+def llm_traces(limit: int = Query(10, ge=1, le=KEEP), _=Depends(require_operator), ctx=Depends(get_ctx)):
+    """Operator-only trace of recent assistant queries: question, tool calls, proposal and validator verdict, answer source."""
+    return traces.recent(ctx, limit)
 
 
 @router.get("/api/operator/proposals")

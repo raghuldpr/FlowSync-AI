@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query, Response
 
 from .. import health, retention
 from ..audit import audit
-from ..deps import get_ctx, require_admin, require_viewer
+from ..deps import get_ctx, require_admin, require_operator, require_viewer
 
 router = APIRouter(tags=["admin"])
 
@@ -47,6 +47,15 @@ def _safe(v):
     """Neutralise spreadsheet formula injection in exported text."""
     s = "" if v is None else str(v)
     return "'" + s if s[:1] in ("=", "+", "-", "@", "\t", "\r") else s
+
+
+@router.get("/api/operator/audit/verify")
+def audit_verify(sess=Depends(require_operator), ctx=Depends(get_ctx)):
+    """Read-only integrity check of the hash-chained audit log: ok, or the first row that no longer matches."""
+    res = ctx.db.verify_audit_chain()
+    audit(ctx.db, sess["username"], sess["role"], "audit_verify", None, {"ok": res["ok"], "rows": res["rows"]},
+          "ok" if res["ok"] else "chain_broken")
+    return res
 
 
 @router.get("/api/admin/audit.csv")

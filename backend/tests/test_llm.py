@@ -4,7 +4,7 @@ import httpx
 import pytest
 
 from app.config import Settings
-from app.llm import orchestrator, tools as T
+from app.llm import orchestrator, tools as T, traces as traces_mod
 from app.llm.client import LLMClient, LLMError
 
 CALLER = {"username": "operator", "role": "operator"}
@@ -234,3 +234,46 @@ def test_llm_api_is_operator_only(client, ctx, op_headers):
     st = client.get("/api/llm/status", headers=op_headers).json()
     assert st["enabled"] is False and "key" not in json.dumps(st).lower()
     assert ("llm_query", "received") in audit_results(ctx)
+
+
+# ---- visible trace -------------------------------------------------------------------------------
+def test_trace_records_question_tools_and_source(world, client):
+    r = ask(world, "How busy is L13?", [call("get_traffic_state", {}), say("L13 holds 6 vehicles.")])
+    assert r["trace_id"] and "summary" not in json.dumps(r["tool_calls"])
+    t = traces_mod.recent(world, 1)[0]
+    assert t["question"] == "How busy is L13?" and t["source"]["kind"] == "stand_in" and t["source"]["model"] == "fake-model"
+    assert [(s["tool"], s["ok"]) for s in t["steps"]] == [("get_traffic_state", True)] and t["steps"][0]["result"].startswith("approaches: ")
+    assert t["proposals"] == [] and t["actor"] == "operator"
+
+
+def test_trace_shows_proposal_and_validator_verdict(world):
+    args = {"intersection": "I1", "axis": "B", "duration_s": 15, "rationale": "L13 is queued"}
+    r = ask(world, "Please extend green for L13", [call("propose_signal_adjustment", args), say("Proposed.")])
+    t = traces_mod.recent(world, 1)[0]
+    assert len(t["proposals"]) == 1 and t["proposals"][0]["id"] == r["proposals"][0]
+    assert t["proposals"][0]["validator_verdict"] in ("pending", "rejected") and t["proposals"][0]["validator_reason"]
+    assert "operator must confirm" in t["proposals"][0]["note"]
+
+
+def test_trace_labels_the_fallback_and_refused_calls(world):
+    r = ask(world, "x", [call("drop_tables", {}), {"content": "  "}])
+    t = traces_mod.recent(world, 1)[0]
+    assert r["mode"] == "deterministic_fallback" and t["source"]["kind"] == "fallback" and t["fallback_reason"] == "empty_answer"
+    assert t["steps"][0]["ok"] is False and t["steps"][0]["result"] == "refused"
+
+
+def test_trace_endpoint_is_operator_only_and_keeps_only_recent(world, client):
+    assert client.get("/api/operator/llm/traces").status_code == 401
+    vh = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": "viewer", "password": "viewer-dev"}).json()["token"]}
+    assert client.get("/api/operator/llm/traces", headers=vh).status_code == 403
+    for i in range(traces_mod.KEEP + 5):
+        ask(world, f"q{i}", [say("a")])
+    oh = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": "operator", "password": "test-operator-pw"}).json()["token"]}
+    rows = client.get("/api/operator/llm/traces?limit=50", headers=oh).json()
+    assert len(rows) == traces_mod.KEEP and rows[0]["question"] == f"q{traces_mod.KEEP + 4}"
+    assert world.db.one("SELECT COUNT(*) AS n FROM llm_traces")["n"] == traces_mod.KEEP
+
+
+def test_trace_never_contains_an_api_key(world):
+    ask(world, "x", [say("a")])
+    assert SECRET not in json.dumps(traces_mod.recent(world, 5))

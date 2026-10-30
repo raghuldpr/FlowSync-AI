@@ -57,6 +57,7 @@ document.addEventListener("click", (e) => {      // delegated: survives re-rende
   else if (d.hr) post(`/api/operator/hazards/${d.hr}/reject`);
   else if (d.hx) post(`/api/operator/hazards/${d.hx}/resolve`);
   else if (d.himg) showImage(b, d.himg);
+  else if (b.id === "au-verify") verifyAudit();
   else if (b.id === "hz-go") post("/api/operator/hazards", { kind: $("#hz-kind").value, edge: $("#hz-edge").value, severity: $("#hz-sev").value });
   else if (b.id === "rp-play") startReplay();
   else if (b.id === "rp-stop") stopReplay();
@@ -268,10 +269,28 @@ async function drawTab(d) {
     body.innerHTML = `<table><tr><th>time</th><th>approach</th><th>transition</th><th>reason</th></tr>${d.warning_events.map((e) => `<tr><td class="mono muted">${esc(e.ts.slice(11, 19))}</td><td>${esc(e.approach)}</td><td>${esc(e.from_state || "·")} → <span class="chip ${chipClass(e.to_state)}">${esc(e.to_state)}</span></td><td class="muted">${esc(e.reason)}</td></tr>`).join("") || "<tr><td class='muted'>No warnings yet.</td></tr>"}</table>`;
   } else if (tab === "audit") {
     const rows = await api("GET", "/api/operator/audit?limit=60");
-    body.innerHTML = `<table><tr><th>time</th><th>actor</th><th>role</th><th>action</th><th>result</th></tr>${rows.map((r) => `<tr><td class="mono muted">${esc(r.ts.slice(11, 19))}</td><td>${esc(r.actor)}</td><td>${esc(r.role)}</td><td>${esc(r.action)} ${esc(r.target || "")}</td><td><span class="chip ${r.result === "ok" ? "ok" : "bad"}">${esc(r.result)}</span></td></tr>`).join("")}</table>`;
+    const html = auditVerifyBar() + `<table><tr><th>time</th><th>actor</th><th>role</th><th>action</th><th>result</th></tr>${rows.map((r) => `<tr><td class="mono muted">${esc(r.ts.slice(11, 19))}</td><td>${esc(r.actor)}</td><td>${esc(r.role)}</td><td>${esc(r.action)} ${esc(r.target || "")}</td><td><span class="chip ${r.result === "ok" ? "ok" : "bad"}">${esc(r.result)}</span></td></tr>`).join("")}</table>`;
+    if (body._ah !== html || !body.querySelector("#au-verify")) { body.innerHTML = html; body._ah = html; }   // redraw only on change: a button replaced mid-click loses the click
   } else {
     body.innerHTML = provenanceTable(d.provenance);
   }
+}
+
+/* ---------- audit chain ---------- */
+let auditCheck = null;                                   // last verify result; the tab is redrawn every second, so it lives here
+async function verifyAudit() {
+  try { auditCheck = { ...(await api("GET", "/api/operator/audit/verify")), at: new Date() }; }
+  catch (e) { if (e.message !== "login required") toast(e.message); return; }
+  if (data) drawTab(data);
+}
+const BROKEN = { row_modified: "this row was edited", broken_link: "a row before this one was deleted or inserted",
+  row_without_hash: "this row was added outside the audit writer", tail_missing: "the newest rows were deleted" };
+function auditVerifyBar() {
+  const c = auditCheck, t = c ? c.at.toTimeString().slice(0, 8) : "";
+  const res = !c ? `<span class="muted">Every row stores a hash of the row before it. Editing or deleting any row breaks the chain.</span>`
+    : c.ok ? `<span class="chip ok">chain intact</span> <span class="muted">${c.rows} rows · head ${esc(c.head)}… · checked ${t}</span>`
+    : `<span class="chip bad">chain broken at row ${esc(c.broken_at)}</span> <span class="muted">${esc(BROKEN[c.reason] || c.reason)} · checked ${t}</span>`;
+  return `<div class="row" style="margin-bottom:8px"><button id="au-verify">Verify chain</button>${res}</div>`;
 }
 
 /* ---------- road conditions ---------- */
@@ -361,6 +380,35 @@ function drawAssistant(d) {
     ${p.status === "pending" ? `<div class="row" style="margin-top:6px"><button data-pc="${p.id}">Confirm</button><button class="ghost" data-pd="${p.id}">Decline</button></div>` : ""}</div>`).join(""));
 }
 
+/* ---------- assistant trace ---------- */
+const SRC_CLS = { fallback: "warn", stand_in: "stale", provider: "ok" };
+const VERDICT_CLS = { pending: "warn", rejected: "bad", confirmed: "ok", declined: "stale", expired: "stale" };
+function traceHtml(t) {
+  const steps = t.steps.map((s) => `<div class="row" style="align-items:baseline"><span class="chip ${s.ok ? "" : "bad"}">${esc(s.tool)}</span>
+    <span class="mono muted">${esc(JSON.stringify(s.args))}</span></div><div class="muted" style="margin:0 0 4px 8px">${esc(s.result)}</div>`).join("")
+    || `<div class="muted">No tools were read.</div>`;
+  const props = t.proposals.map((p) => `<div class="row"><b>Proposal #${p.id}: ${esc(p.intersection)} → axis ${esc(p.axis)} for ${p.duration_s}s</b>
+    <span class="chip ${VERDICT_CLS[p.validator_verdict] || ""}">validator: ${esc(p.validator_verdict)}</span><span class="muted">${esc(p.validator_reason)}</span></div>
+    <div class="muted" style="margin-left:8px">${esc(p.note)}</div>`).join("");
+  return `<details class="incident" style="border-left:4px solid var(--line)"><summary><span class="mono muted">${esc(t.ts.slice(11, 19))}</span>
+    <b>${esc(t.question)}</b> <span class="chip ${SRC_CLS[t.source.kind] || ""}">${esc(t.source.label)}${t.source.model ? " · " + esc(t.source.model) : ""}${t.fallback_reason ? " · " + esc(t.fallback_reason) : ""}</span>
+    ${t.proposals.length ? `<span class="chip warn">${t.proposals.length} proposal</span>` : ""}</summary>
+    <div style="margin-top:6px"><div class="muted">1. Question asked by ${esc(t.actor)}</div><div class="muted">2. Read-only tools</div>${steps}
+    <div class="muted" style="margin-top:4px">3. Proposal and validator</div>${props || `<div class="muted" style="margin-left:8px">None. The assistant cannot change anything itself.</div>`}</div></details>`;
+}
+let traceBusy = false;
+async function pollTraces() {
+  if (traceBusy || !token) return;
+  traceBusy = true;
+  try {
+    const rows = await api("GET", "/api/operator/llm/traces?limit=8");
+    $("#trace-n").textContent = String(rows.length);
+    if (rows.length) setHtml("#traces", rows.map(traceHtml).join(""));
+  } catch (e) { /* not signed in, or the panel is not available: leave the last trace on screen */ }
+  traceBusy = false;
+}
+setInterval(pollTraces, 2000);
+
 $("#ask-form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const q = $("#ask-q").value.trim(); if (!q) return;
@@ -372,7 +420,7 @@ $("#ask-form").addEventListener("submit", async (ev) => {
     out.innerHTML = `<div class="row"><span class="chip ${r.mode === "llm" ? "ok" : "warn"}">${r.mode === "llm" ? "LLM · " + esc(r.model) : "DETERMINISTIC FALLBACK" + (r.fallback_reason ? " · " + esc(r.fallback_reason) : "")}</span>${tools}</div>
       <div style="white-space:pre-wrap;margin-top:6px">${esc(r.answer)}</div>
       ${r.proposals.length ? "<div class='muted' style='margin-top:6px'>Proposal(s) queued below — they act only after you confirm.</div>" : ""}`;
-    refresh();
+    refresh(); pollTraces();
   } catch (e) { out.innerHTML = `<span style="color:var(--bad)">${esc(e.message)}</span>`; }
   go.disabled = false;
 });

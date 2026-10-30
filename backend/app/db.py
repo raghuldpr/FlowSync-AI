@@ -1,3 +1,5 @@
+import hashlib
+import json
 import sqlite3
 import threading
 from datetime import datetime, timezone
@@ -15,7 +17,11 @@ CREATE TABLE IF NOT EXISTS sessions (
   created_at TEXT NOT NULL, expires_at REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS audit_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, actor TEXT NOT NULL, role TEXT NOT NULL,
-  action TEXT NOT NULL, target TEXT, params TEXT, result TEXT NOT NULL);
+  action TEXT NOT NULL, target TEXT, params TEXT, result TEXT NOT NULL, prev_hash TEXT, hash TEXT);
+CREATE TABLE IF NOT EXISTS audit_head (
+  k INTEGER PRIMARY KEY CHECK (k = 1), last_id INTEGER NOT NULL, last_hash TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS llm_traces (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, actor TEXT NOT NULL, trace TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS traffic_snapshots (
   id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, source TEXT NOT NULL, device_id TEXT NOT NULL,
   approach TEXT NOT NULL, count INTEGER NOT NULL);
@@ -72,6 +78,16 @@ CREATE TABLE IF NOT EXISTS system_events (
 """
 
 
+GENESIS = "0" * 64
+_AUDIT_COLS = ("ts", "actor", "role", "action", "target", "params", "result")
+
+
+def audit_hash(prev_hash: str, row_id: int, row) -> str:
+    """SHA-256 over the previous row's hash, the row id and the row's content (canonical JSON, so field boundaries are unambiguous)."""
+    body = json.dumps([row_id] + [row[c] for c in _AUDIT_COLS], separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256((prev_hash + "|" + body).encode("utf-8")).hexdigest()
+
+
 class Database:
     """Single shared connection, serialised by a lock (SQLite is single-writer anyway)."""
 
@@ -82,6 +98,65 @@ class Database:
         if path != ":memory:":
             self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.executescript(SCHEMA)
+        self._migrate_audit_chain()
+
+    def _migrate_audit_chain(self):
+        """Databases created before the chain existed get the two columns, and their existing rows are chained once
+        (so tampering AFTER the upgrade is detectable; what happened before it cannot be proven)."""
+        with self._lock:
+            cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(audit_log)").fetchall()}
+            for c in ("prev_hash", "hash"):
+                if c not in cols:
+                    self._conn.execute(f"ALTER TABLE audit_log ADD COLUMN {c} TEXT")
+            if self._conn.execute("SELECT 1 FROM audit_head").fetchone() is not None:
+                return
+            prev, last_id = GENESIS, 0
+            for r in self._conn.execute("SELECT * FROM audit_log ORDER BY id").fetchall():
+                h = audit_hash(prev, r["id"], r)
+                self._conn.execute("UPDATE audit_log SET prev_hash=?, hash=? WHERE id=?", (prev, h, r["id"]))
+                prev, last_id = h, r["id"]
+            self._conn.execute("INSERT INTO audit_head(k,last_id,last_hash) VALUES(1,?,?)", (last_id, prev))
+
+    def append_audit(self, ts, actor, role, action, target, params, result) -> int:
+        """Insert one audit row and chain it to the previous one, atomically."""
+        row = dict(zip(_AUDIT_COLS, (ts, actor, role, action, target, params, result)))
+        with self._lock:
+            head = self._conn.execute("SELECT last_hash FROM audit_head WHERE k=1").fetchone()
+            prev = head["last_hash"] if head else GENESIS
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                rid = self._conn.execute(
+                    "INSERT INTO audit_log(ts,actor,role,action,target,params,result,prev_hash) VALUES(?,?,?,?,?,?,?,?)",
+                    (ts, actor, role, action, target, params, result, prev)).lastrowid
+                h = audit_hash(prev, rid, row)
+                self._conn.execute("UPDATE audit_log SET hash=? WHERE id=?", (h, rid))
+                self._conn.execute("INSERT INTO audit_head(k,last_id,last_hash) VALUES(1,?,?) "
+                                   "ON CONFLICT(k) DO UPDATE SET last_id=excluded.last_id, last_hash=excluded.last_hash", (rid, h))
+                self._conn.execute("COMMIT")
+            except Exception:
+                self._conn.execute("ROLLBACK")
+                raise
+        return rid
+
+    def verify_audit_chain(self) -> dict:
+        """Walk the log in id order. Reports the first row that does not match: edited content, a broken link (a row was
+        deleted or inserted), a row with no hash, or a missing tail (checked against the stored head)."""
+        with self._lock:
+            rows = self._conn.execute("SELECT * FROM audit_log ORDER BY id").fetchall()
+            head = self._conn.execute("SELECT last_id, last_hash FROM audit_head WHERE k=1").fetchone()
+        prev, n = GENESIS, 0
+        for r in rows:
+            n += 1
+            if r["hash"] is None or r["prev_hash"] is None:
+                return {"ok": False, "rows": n, "broken_at": r["id"], "reason": "row_without_hash"}
+            if r["prev_hash"] != prev:
+                return {"ok": False, "rows": n, "broken_at": r["id"], "reason": "broken_link"}
+            if audit_hash(prev, r["id"], r) != r["hash"]:
+                return {"ok": False, "rows": n, "broken_at": r["id"], "reason": "row_modified"}
+            prev = r["hash"]
+        if head is not None and (head["last_hash"] != prev or head["last_id"] != (rows[-1]["id"] if rows else 0)):
+            return {"ok": False, "rows": n, "broken_at": head["last_id"], "reason": "tail_missing"}
+        return {"ok": True, "rows": n, "broken_at": None, "reason": None, "head": prev[:16]}
 
     def execute(self, sql: str, params: tuple = ()) -> int:
         with self._lock:

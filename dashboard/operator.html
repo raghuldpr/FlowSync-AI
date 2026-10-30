@@ -113,6 +113,8 @@
         <button id="ask-go" type="submit">Ask</button>
       </form>
       <div id="ask-out" style="margin-top:8px" aria-live="polite"></div>
+      <h2 style="margin-top:12px">Assistant trace <span class="chip stale" id="trace-n">0</span></h2>
+      <div id="traces"><p class="muted" style="margin:0">Each question shows here: the tools it read, any proposal, the safety validator's verdict and what produced the answer.</p></div>
       <h2 style="margin-top:12px">Signal proposals</h2>
       <div id="proposals"><p class="muted" style="margin:0">None yet. Proposals are only checked and queued here; you confirm them, and the signal controller still enforces clearance.</p></div>
     </section>
