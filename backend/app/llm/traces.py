@@ -26,7 +26,7 @@ def source_label(client, mode: str) -> dict:
     model = getattr(client, "model", None)
     if not isinstance(client, LLMClient) or host in LOCAL_HOSTS:
         return {"kind": "stand_in", "label": "Stand-in or local model", "model": model, "host": host}
-    return {"kind": "provider", "label": "External provider (not yet verified)", "model": model, "host": host}
+    return {"kind": "provider", "label": "External provider (live model)", "model": model, "host": host}
 
 
 def summarise(raw) -> str:

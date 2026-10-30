@@ -26,7 +26,7 @@ Every `POST /api/llm/query` stores a trace, and the response gains a `trace_id`.
 
 * **Endpoint:** `GET /api/operator/llm/traces?limit=10` (operator or admin), newest first.
 * **A trace holds:** the question (cut to 200 characters), the source that answered, the fallback reason if any, each read-tool call (tool, arguments, ok or refused, a one-line summary of the result), each proposal with the validator's verdict and reason, and the answer length.
-* **Source label:** `fallback` (no model used), `stand_in` (a test model or a local server) or `provider` (an external provider, shown as "not yet verified"). **The real provider has not been tested against this system**, so the trace does not call it verified.
+* **Source label:** `fallback` (no model used), `stand_in` (a test model or a local server) or `provider` (an external provider, shown as "External provider (live model)"). The real provider (Groq, `openai/gpt-oss-120b`) was run against this system on 2026-10-30: tool calls, a validated proposal and the offline fallback all worked; this is one test run, not a load test.
 * **Page:** the **Assistant trace** panel under the question box, refreshed every 2 seconds. Each entry opens to show: question, tools read, proposal and validator verdict.
 * **Authority is unchanged:** the model still only reads and may only propose; the validator vets the proposal, an operator must confirm it, and the validator checks again. The trace is a record and never feeds back into any decision.
 * **No secrets:** traces contain no API key, headers or provider responses, only the cleaned tool arguments and short result summaries.

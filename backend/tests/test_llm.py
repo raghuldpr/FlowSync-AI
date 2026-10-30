@@ -159,7 +159,7 @@ def test_tools_are_denied_for_non_operator_callers(world):
 def test_tool_registry_has_exactly_the_approved_tools():
     assert set(T.TOOLS) == {"get_traffic_state", "get_signal_states", "get_active_incidents", "get_incident_impact",
                             "get_active_warnings", "get_route_alternatives", "get_system_events",
-                            "propose_signal_adjustment"}
+                            "get_network_map", "get_road_closure_impact", "propose_signal_adjustment"}
     assert [t.name for t in T.TOOLS.values() if t.write] == ["propose_signal_adjustment"]
 
 
@@ -170,6 +170,25 @@ def test_route_alternatives_respect_closures(world):
     world.store.closed_edges.add("L13")
     r = T.TOOLS["get_route_alternatives"].handler(T.ToolCtx(world, CALLER, False), {"origin": "ext_W", "destination": "ext_S"})
     assert all("L13" not in x["path"] for x in r["routes"])
+
+
+def test_network_map_and_closure_impact_are_read_only(world):
+    tc = T.ToolCtx(world, CALLER, False)
+    m = T.TOOLS["get_network_map"].handler(tc, {})
+    assert "ext_W" in [e["id"] for e in m["external_entrances"]] and "W1" in [r["id"] for r in m["roads"]]
+    before = set(world.store.all_closed())
+    r = T.TOOLS["get_road_closure_impact"].handler(tc, {"road": "L13"})
+    assert r["road"] == "L13" and r["affected_intersections"] and "worst_trips" in r
+    assert set(world.store.all_closed()) == before                       # a what-if closes nothing
+    bad = T.TOOLS["get_road_closure_impact"].handler(tc, {"road": "nope"})
+    assert "error" in bad and "L13" in bad["roads"]
+    assert not T.TOOLS["get_network_map"].write and not T.TOOLS["get_road_closure_impact"].write
+
+
+def test_provider_trace_label_makes_no_unverified_claim():
+    client = LLMClient(settings(llm_enabled=True, llm_base_url="https://api.example.com/v1", llm_model="m", llm_api_key=SECRET))
+    label = traces_mod.source_label(client, "llm")
+    assert label["kind"] == "provider" and "not yet verified" not in label["label"]
 
 
 # ---- client, secrets ------------------------------------------------------------------------------

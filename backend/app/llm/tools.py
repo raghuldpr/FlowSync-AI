@@ -145,6 +145,33 @@ def get_route_alternatives(tc, args):
                        for p, c in ranked]}
 
 
+def get_network_map(tc, args):
+    """The road network in the ids every other tool uses: entrances, intersections, roads (edges) and what is closed."""
+    t, ctx = tc.ctx.topology, tc.ctx
+    ext = [n for n in t.nodes if n not in t.intersections]
+    return {"external_entrances": [{"id": n, "label": t.node_labels.get(n, n)} for n in ext],
+            "intersections": list(t.intersections),
+            "roads": [{"id": e.id, "from": e.src, "to": e.dst, "length": e.length,
+                       "serves_intersection": t.approaches[e.id].intersection if e.id in t.approaches else None}
+                      for e in t.edges.values()],
+            "closed_roads": sorted(ctx.store.all_closed()),
+            "note": "A road id is also the id of the approach that feeds the intersection at its end."}
+
+
+def get_road_closure_impact(tc, args):
+    """What a closure of one road would do: affected intersections, which entrance-to-entrance trips reroute and by how much."""
+    t = tc.ctx.topology
+    road = args["road"]
+    if road not in t.edges:
+        return {"error": "unknown road id; call get_network_map for the ids", "roads": list(t.edges)}
+    imp = tc.ctx.incidents.impact("stalled_vehicle", road)
+    pairs = sorted(imp["pairs"], key=lambda p: -(p["added_delay_s"] or 0))[:6]
+    return {"road": road, "affected_roads": imp["affected_edges"], "affected_intersections": imp["affected_intersections"],
+            "trips_affected": imp["routes_affected"], "max_added_delay_s": imp["max_added_delay_s"],
+            "unreachable_trips": imp["unreachable_pairs"], "worst_trips": pairs,
+            "note": "Computed deterministically on current congestion; nothing was closed."}
+
+
 def get_system_events(tc, args):
     rows = tc.ctx.db.query("SELECT ts,type,severity,payload FROM system_events ORDER BY id DESC LIMIT ?", (args["limit"],))
     return [{"ts": r["ts"], "type": r["type"], "severity": r["severity"], "payload": (r["payload"] or "")[:160]} for r in rows]
@@ -171,6 +198,10 @@ TOOLS = {t.name: t for t in [
     Tool("get_active_warnings", "Active emergency vehicles, their route and which approaches currently show a warning.", _obj(), get_active_warnings),
     Tool("get_route_alternatives", "Best and alternative routes between two external nodes under current congestion and closures.",
          _obj({"origin": NODE, "destination": NODE}, ["origin", "destination"]), get_route_alternatives),
+    Tool("get_network_map", "The road network: external entrances, intersections, roads (ids, from, to) and which roads are closed. "
+         "Call this first when a question names a road, entrance or intersection.", _obj(), get_network_map),
+    Tool("get_road_closure_impact", "What closing one road would do (read-only what-if): affected intersections, trips that reroute and the added delay.",
+         _obj({"road": {"type": "string", "maxLength": 16}}, ["road"]), get_road_closure_impact),
     Tool("get_system_events", "Most recent system events.", _obj({"limit": {"type": "integer", "minimum": 1, "maximum": 20}}, ["limit"]), get_system_events),
     Tool("propose_signal_adjustment",
          "PROPOSE (not perform) asking an intersection to serve one axis for a while. A deterministic validator accepts or rejects it, "

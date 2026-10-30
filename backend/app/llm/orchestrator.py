@@ -21,7 +21,9 @@ SYSTEM_PROMPT = (
     "3. You cannot control signals. The only action available is propose_signal_adjustment, which creates a proposal "
     "that a deterministic safety validator may reject and a human operator must confirm. Report the validator outcome faithfully.\n"
     "4. Never write messages for drivers or the public, and never suggest anyone disobey a signal or road rule.\n"
-    "5. Be concise: plain sentences that cite approach and intersection ids and units (vehicles, seconds)."
+    "5. For questions about roads, entrances or 'what if a road were closed', first call get_network_map to learn the ids, "
+    "then get_road_closure_impact; do not answer that you lack topology data without calling them.\n"
+    "6. Be concise: plain sentences that cite approach and intersection ids and units (vehicles, seconds)."
 )
 
 WRITE_INTENT = re.compile(r"\b(propose|adjust|change|extend|give|switch|prioriti[sz]e|request|hold|serve)\b", re.I)
