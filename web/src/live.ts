@@ -147,7 +147,7 @@ export function liveSnapshot(ov: Overview, topo: Topo | null, extra: { priority:
   const users = ov.road_users
   const warnedUsers = users.filter(isWarned)
   const rerouted = users.filter((u) => Object.values(u.alerts).includes('redirected')).length
-  const notWarned = users.length - warnedUsers.length
+  const notWarned = users.filter((u) => u.role !== 'ambulance' && !isWarned(u)).length // the ambulance is not a car that should be warned
 
   const ids = topo ? Object.entries(topo.nodes).filter(([, n]) => n.kind === 'intersection').map(([id]) => id) : Object.keys(ov.signals)
   const signals: SigState[] = ids.map((id) => {
