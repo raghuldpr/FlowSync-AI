@@ -4,7 +4,7 @@
 
 **The laptop and the hotspot (`docs/NETWORK_SETUP.md`) stay the primary plan.** They work with no internet for everything except the LLM. Use the hosted copy when the hotspot cannot carry the judges' phones, or as a backup.
 
-What hosting gives: one public HTTPS address that phones reach on their own mobile data, with no hotspot, no firewall rule and no 8-client limit.
+What hosting gives: one public HTTPS address that phones reach on their own mobile data, with no hotspot, no firewall rule and no 8-client limit. The hardware stays standalone and is not connected to it.
 What it costs: the demo depends on the internet and on Catalyst, in-memory state is lost when the instance restarts, and the backend must stay a single instance (see "Constraints").
 
 ## What is verified from the official docs, and what is not
@@ -30,7 +30,7 @@ Sources: [AppSail basics](https://docs.catalyst.zoho.com/en/serverless/help/apps
 3. **The database is not durable.** The command sets `FLOWSYNC_DATA_DIR=/tmp/flowsync`. On a restart or a deploy you lose the audit log (and its chain), hazards, authority reports and assistant traces; the logins are re-created from the environment variables. Guest sessions and the emergency-vehicle state were never stored. The app starts cleanly from an empty folder.
 4. **No pothole weights and no OpenCV on the host.** The pothole layer on phones is simulated (operator-declared or scripted hazards) and works. Camera-image upload would fail on the host, and the boards are standalone, so nothing uses it.
 5. **The 30 s request limit.** The assistant waits up to `LLM_DEADLINE_S` (default 25 s). Set it to 20 on the host.
-6. **The development device keys are public** (they are in the repository). The build refuses to run without your private keys from `python -m app.setup_demo`.
+6. **The development device keys are public** (they are in the repository). The build refuses to run without your private keys from `python -m app.setup_demo`. These keys are used only by the **simulator**, which posts to the hosted backend through the signed device API; no board uses them. `config/devices.yaml` itself is not changed.
 
 ## Settings the code now understands
 
@@ -136,7 +136,7 @@ Per the official free-tier page (confirm in your console): the free allowance fo
 - **Keep the laptop plan ready.** The hosted copy is separate: the hotspot, `docs/NETWORK_SETUP.md` and `scripts\start_demo.ps1` need none of it. Switching back means printing the hotspot QR sheet (`python -m app.joinqr`).
 - **Redeploy** with `.\deploy\catalyst\build.ps1` then `catalyst deploy` (this resets all hosted state).
 - **To roll back** delete the service in the console, or set the phones back to the laptop address.
-- **Boards:** the table, car and camera are standalone and do not use the hosted backend. Connecting them is a separate decision (it needs TLS on the board and new firmware).
+- **Boards:** decided: the table, car and ESP32-CAM stay completely standalone and send nothing to the backend. Everything the hosted backend shows comes from simulation (guest phones, the rehearsal bots and the simulator). No board settings, firmware changes or TLS-on-ESP32 work are needed.
 
 ## What is verified here
 
