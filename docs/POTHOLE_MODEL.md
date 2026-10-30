@@ -31,3 +31,16 @@ Downloads to `models/pothole_yolov8s_rdd.onnx` (git-ignored), checks the size an
 ## Limits to say out loud
 - Trained on dashcam-style photos; a low-resolution ESP32-CAM on a toy car looking at a printed prop is a different domain, so expect misses and false alarms. Test with the real camera before the demo.
 - A model detection is never shown to drivers as fact.
+
+## Test material (SIMULATED camera feed)
+The ESP32-CAM in the demo is standalone. To show the detection and the operator workflow without it, the scripts in `tools/` post
+frames to a running backend as a **simulated camera feed** (they use the `roadcam-1` development key from `config/devices.yaml`):
+
+```
+python tools/make_pothole_test.py                                   # regenerates testdata/pothole/ (synthetic roads, a drive-by clip, a print prop)
+python tools/send_test_image.py testdata/pothole/road_pothole_medium.jpg
+python tools/send_test_video.py testdata/pothole/drive_by.mp4 --fps 1
+```
+One pothole seen in many frames becomes one unreviewed hazard; the operator must verify it, and a verified hazard can be handed to a
+**simulated** road-authority outbox (nothing leaves the system). The operator page shows the camera feed, the detection box and the outbox.
+`firmware/lcdtest` is a bring-up sketch for the car's 16x2 LCD on its own I2C bus (GPIO 16/17).

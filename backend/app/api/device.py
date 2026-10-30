@@ -173,8 +173,10 @@ def post_image(call: DeviceCall = Depends(device_call), ctx=Depends(get_ctx)):
     if detections and detections[0]["confidence"] >= 0.5:
         d = detections[0]
         try:
-            reported = ctx.hazards.create("pothole", body.edge, d["severity"], det_source, status="reported",
-                                          progress=body.progress, confidence=d["confidence"], image_id=image_id)
+            reported = ctx.hazards.find_active("pothole", body.edge, body.progress)      # same pothole in the next frame: no second report
+            if reported is None:
+                reported = ctx.hazards.create("pothole", body.edge, d["severity"], det_source, status="reported",
+                                              progress=body.progress, confidence=d["confidence"], image_id=image_id)
         except OverflowError:
             reported = None
     images.purge_old(ctx.db, ctx.settings.image_dir)

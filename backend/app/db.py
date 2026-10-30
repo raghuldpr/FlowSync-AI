@@ -69,6 +69,9 @@ CREATE TABLE IF NOT EXISTS hazards (
   id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, edge TEXT NOT NULL, progress REAL, severity TEXT NOT NULL,
   status TEXT NOT NULL, source TEXT NOT NULL, confidence REAL, image_id TEXT, created_at TEXT NOT NULL,
   decided_by TEXT, decided_at TEXT, resolved_at TEXT);
+CREATE TABLE IF NOT EXISTS authority_reports (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, hazard_id INTEGER NOT NULL UNIQUE, kind TEXT NOT NULL, edge TEXT NOT NULL,
+  severity TEXT NOT NULL, image_id TEXT, sent_by TEXT NOT NULL, created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS images (
   id TEXT PRIMARY KEY, device_id TEXT NOT NULL, path TEXT NOT NULL, bytes INTEGER NOT NULL, edge TEXT, progress REAL,
   created_at TEXT NOT NULL, detection TEXT);

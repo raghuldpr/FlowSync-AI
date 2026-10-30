@@ -58,6 +58,7 @@ document.addEventListener("click", (e) => {      // delegated: survives re-rende
   else if (d.hx) post(`/api/operator/hazards/${d.hx}/resolve`);
   else if (d.himg) showImage(b, d.himg);
   else if (b.id === "au-verify") verifyAudit();
+  else if (d.hn) { post(`/api/operator/hazards/${d.hn}/notify-authority`); setTimeout(pollAuthority, 600); }
   else if (b.id === "hz-go") post("/api/operator/hazards", { kind: $("#hz-kind").value, edge: $("#hz-edge").value, severity: $("#hz-sev").value });
   else if (b.id === "rp-play") startReplay();
   else if (b.id === "rp-stop") stopReplay();
@@ -294,15 +295,55 @@ function auditVerifyBar() {
 }
 
 /* ---------- road conditions ---------- */
+/* draws the detector's boxes (sent in the X-Detection header) on the frame so the audience sees WHERE it found the dark patch */
+async function annotate(resp) {
+  const blob = await resp.blob();
+  let dets = [];
+  try { dets = JSON.parse(resp.headers.get("X-Detection") || "[]"); } catch (e) { /* no boxes */ }
+  if (!dets.length) return URL.createObjectURL(blob);
+  const bmp = await createImageBitmap(blob), cv = document.createElement("canvas");
+  cv.width = bmp.width; cv.height = bmp.height;
+  const g = cv.getContext("2d"); g.drawImage(bmp, 0, 0);
+  g.lineWidth = Math.max(2, bmp.width / 160); g.strokeStyle = "#ff3b30"; g.fillStyle = "#ff3b30"; g.font = `bold ${Math.max(11, bmp.width / 24)}px sans-serif`;
+  for (const d of dets) {
+    const [x, y, w, h] = d.bbox; g.strokeRect(x, y, w, h);
+    g.fillText(`pothole? ${Math.round(d.confidence * 100)}%`, x, Math.max(12, y - 4));
+  }
+  return URL.createObjectURL(await new Promise((res) => cv.toBlob(res, "image/jpeg", 0.9)));
+}
 async function showImage(btn, id) {                      // images are operator-only: fetch with the token, show as a blob
   try {
     const r = await fetch(`/api/operator/images/${id}`, { headers: { Authorization: "Bearer " + token } });
     if (!r.ok) throw new Error("image unavailable");
     const img = document.createElement("img");
-    img.src = URL.createObjectURL(await r.blob()); img.alt = "road camera frame"; img.style.cssText = "max-width:100%;border-radius:6px;margin-top:6px;display:block";
+    img.src = await annotate(r); img.alt = "road camera frame"; img.style.cssText = "max-width:100%;border-radius:6px;margin-top:6px;display:block";
     btn.replaceWith(img);
   } catch (e) { toast(e.message); }
 }
+/* every road-camera frame, newest first, with its time and what the detector said (even when it found nothing) */
+let camLatest = null, camUrl = null, camBusy = false;
+async function pollCamera() {
+  if (!token || camBusy) return;
+  camBusy = true;
+  try {
+    const frames = (await api("GET", "/api/operator/camera-frames?limit=8")).frames;
+    const age = $("#cam-age");
+    if (!frames.length) { age.textContent = "no frames"; age.className = "chip stale"; return; }
+    const secs = Math.max(0, Math.round((Date.now() - Date.parse(frames[0].created_at)) / 1000));
+    age.textContent = `last frame ${secs}s ago`; age.className = "chip " + (secs > 15 ? "warn" : "ok");
+    if (frames[0].id !== camLatest) {
+      const r = await fetch(`/api/operator/images/${frames[0].id}`, { headers: { Authorization: "Bearer " + token } });
+      if (r.ok) { if (camUrl) URL.revokeObjectURL(camUrl); camUrl = await annotate(r); camLatest = frames[0].id; }
+    }
+    const verdict = (f) => f.detections.length ? `possible pothole ${Math.round(f.detections[0].confidence * 100)}% (${esc(f.detections[0].severity)})` : "nothing found";
+    setHtml("#camfeed", `${camUrl ? `<img src="${camUrl}" alt="latest road camera frame" style="max-width:100%;border-radius:6px;display:block">` : ""}
+      <table style="width:100%;font-size:12px;margin-top:6px">${frames.map((f) =>
+        `<tr><td>${new Date(f.created_at).toLocaleTimeString()}</td><td>${esc(f.edge || "")}</td><td>${Math.round(f.bytes / 1024)} KB</td><td>${verdict(f)}</td></tr>`).join("")}</table>`);
+  } catch (e) { /* login pending or backend briefly unreachable: try again next tick */ }
+  finally { camBusy = false; }
+}
+setInterval(pollCamera, 2000);
+
 function drawHazards(d) {
   const hz = d.hazards || [], pending = hz.filter((h) => h.status === "reported").length;
   const c = $("#hz-count"); c.textContent = hz.length ? `${hz.length}${pending ? " · " + pending + " to review" : ""}` : "0"; c.className = "chip " + (pending ? "bad" : hz.length ? "warn" : "stale");
@@ -311,10 +352,21 @@ function drawHazards(d) {
   setHtml("#hazards", hz.map((h) => `<div class="incident ${h.status === "open" ? "medium" : ""}" style="${h.status === "reported" ? "border-left:4px solid var(--stale)" : ""}">
     <div class="row"><b>#${h.id} ${esc(h.kind)}</b> on ${esc(h.edge)} <span class="chip ${h.severity === "high" ? "bad" : h.severity === "medium" ? "warn" : ""}">${esc(h.severity)}</span>
       <span class="chip ${h.status === "open" ? "ok" : "stale"}">${h.status === "reported" ? "unreviewed" : esc(h.status)}</span>
-      <span class="muted">${esc(h.source)}${h.confidence != null ? " · " + Math.round(h.confidence * 100) + "% confidence (heuristic)" : ""}</span></div>
+      <span class="muted">${h.created_at ? new Date(h.created_at).toLocaleTimeString() + " · " : ""}${esc(h.source)}${h.confidence != null ? " · " + Math.round(h.confidence * 100) + "% confidence (" + (h.source === "camera_model" ? "pretrained model" : "heuristic") + ", needs your check)" : ""}</span></div>
     ${h.image_id ? `<button class="ghost" data-himg="${esc(h.image_id)}">Show camera frame</button>` : ""}
-    <div class="row" style="margin-top:6px">${h.status === "reported" ? `<button data-hv="${h.id}">Verify</button><button class="ghost" data-hr="${h.id}">Reject</button>` : `<button class="ghost" data-hx="${h.id}">Resolve</button>`}</div></div>`).join(""));
+    <div class="row" style="margin-top:6px">${h.status === "reported" ? `<button data-hv="${h.id}">Verify</button><button class="ghost" data-hr="${h.id}">Reject</button>` : `<button data-hn="${h.id}">Send to road authority</button><button class="ghost" data-hx="${h.id}">Resolve</button>`}</div></div>`).join(""));
 }
+/* simulated outbox: what would be handed to the road authority (nothing leaves the system) */
+async function pollAuthority() {
+  if (!token) return;
+  try {
+    const rs = (await api("GET", "/api/operator/authority-reports")).reports;
+    if (!rs.length) return;
+    setHtml("#authority", rs.map((r) => `<div class="row"><b>#${r.hazard_id} ${esc(r.kind)}</b> on ${esc(r.edge)} <span class="chip">${esc(r.severity)}</span>
+      <span class="muted">${new Date(r.created_at).toLocaleTimeString()} · by ${esc(r.sent_by)}${r.image_id ? " · frame attached" : ""}</span></div>`).join(""));
+  } catch (e) { /* try again next tick */ }
+}
+setInterval(pollAuthority, 4000);
 
 /* ---------- replay ---------- */
 function stopReplay() {
