@@ -57,6 +57,7 @@ document.addEventListener("click", (e) => {      // delegated: survives re-rende
   else if (d.hr) post(`/api/operator/hazards/${d.hr}/reject`);
   else if (d.hx) post(`/api/operator/hazards/${d.hx}/resolve`);
   else if (d.himg) showImage(b, d.himg);
+  else if (b.id === "au-verify") verifyAudit();
   else if (b.id === "hz-go") post("/api/operator/hazards", { kind: $("#hz-kind").value, edge: $("#hz-edge").value, severity: $("#hz-sev").value });
   else if (b.id === "rp-play") startReplay();
   else if (b.id === "rp-stop") stopReplay();
@@ -268,10 +269,27 @@ async function drawTab(d) {
     body.innerHTML = `<table><tr><th>time</th><th>approach</th><th>transition</th><th>reason</th></tr>${d.warning_events.map((e) => `<tr><td class="mono muted">${esc(e.ts.slice(11, 19))}</td><td>${esc(e.approach)}</td><td>${esc(e.from_state || "·")} → <span class="chip ${chipClass(e.to_state)}">${esc(e.to_state)}</span></td><td class="muted">${esc(e.reason)}</td></tr>`).join("") || "<tr><td class='muted'>No warnings yet.</td></tr>"}</table>`;
   } else if (tab === "audit") {
     const rows = await api("GET", "/api/operator/audit?limit=60");
-    body.innerHTML = `<table><tr><th>time</th><th>actor</th><th>role</th><th>action</th><th>result</th></tr>${rows.map((r) => `<tr><td class="mono muted">${esc(r.ts.slice(11, 19))}</td><td>${esc(r.actor)}</td><td>${esc(r.role)}</td><td>${esc(r.action)} ${esc(r.target || "")}</td><td><span class="chip ${r.result === "ok" ? "ok" : "bad"}">${esc(r.result)}</span></td></tr>`).join("")}</table>`;
+    body.innerHTML = auditVerifyBar() + `<table><tr><th>time</th><th>actor</th><th>role</th><th>action</th><th>result</th></tr>${rows.map((r) => `<tr><td class="mono muted">${esc(r.ts.slice(11, 19))}</td><td>${esc(r.actor)}</td><td>${esc(r.role)}</td><td>${esc(r.action)} ${esc(r.target || "")}</td><td><span class="chip ${r.result === "ok" ? "ok" : "bad"}">${esc(r.result)}</span></td></tr>`).join("")}</table>`;
   } else {
     body.innerHTML = provenanceTable(d.provenance);
   }
+}
+
+/* ---------- audit chain ---------- */
+let auditCheck = null;                                   // last verify result; the tab is redrawn every second, so it lives here
+async function verifyAudit() {
+  try { auditCheck = { ...(await api("GET", "/api/operator/audit/verify")), at: new Date() }; }
+  catch (e) { if (e.message !== "login required") toast(e.message); return; }
+  if (data) drawTab(data);
+}
+const BROKEN = { row_modified: "this row was edited", broken_link: "a row before this one was deleted or inserted",
+  row_without_hash: "this row was added outside the audit writer", tail_missing: "the newest rows were deleted" };
+function auditVerifyBar() {
+  const c = auditCheck, t = c ? c.at.toTimeString().slice(0, 8) : "";
+  const res = !c ? `<span class="muted">Every row stores a hash of the row before it. Editing or deleting any row breaks the chain.</span>`
+    : c.ok ? `<span class="chip ok">chain intact</span> <span class="muted">${c.rows} rows · head ${esc(c.head)}… · checked ${t}</span>`
+    : `<span class="chip bad">chain broken at row ${esc(c.broken_at)}</span> <span class="muted">${esc(BROKEN[c.reason] || c.reason)} · checked ${t}</span>`;
+  return `<div class="row" style="margin-bottom:8px"><button id="au-verify">Verify chain</button>${res}</div>`;
 }
 
 /* ---------- road conditions ---------- */

@@ -8,7 +8,7 @@ import re
 import time
 
 from ..audit import audit, event
-from . import fallback, tools as T
+from . import fallback, tools as T, traces
 from .client import LLMError
 
 SYSTEM_PROMPT = (
@@ -29,7 +29,14 @@ MAX_ANSWER = 2000
 
 
 def ask(ctx, question: str, caller: dict) -> dict:
-    """Returns {answer, mode, model, tool_calls, proposals, fallback_reason}. Never raises."""
+    """Returns {answer, mode, model, tool_calls, proposals, fallback_reason, trace_id}. Never raises."""
+    summaries = []                       # one short result summary per tool call, kept for the trace only
+    result = _ask(ctx, question, caller, summaries)
+    result["trace_id"] = traces.record(ctx, question, caller, result, summaries)
+    return result
+
+
+def _ask(ctx, question: str, caller: dict, summaries: list) -> dict:
     audit(ctx.db, caller["username"], caller["role"], "llm_query", None, {"question": T.clean(question, 200)}, "received")
     client, cfg = ctx.llm, ctx.settings
     write_allowed = bool(WRITE_INTENT.search(question))
@@ -77,6 +84,7 @@ def ask(ctx, question: str, caller: dict) -> dict:
                 else:
                     res = T.execute(tc, name, args)
                     calls.append({"name": str(name)[:64], "args": T.clean(args), "ok": res["ok"]})
+                    summaries.append(traces.summarise(res["raw"]) if res["ok"] else "refused")
                     if res["ok"] and name == "propose_signal_adjustment":
                         proposals.append(res["raw"]["id"])
                 messages.append({"role": "tool", "tool_call_id": cid, "content": res["content"]})
